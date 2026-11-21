@@ -1,0 +1,23 @@
+Study entrance · third-party assets
+
+Poly Haven · CC0 · https://polyhaven.com/license
+White oak veneer — https://polyhaven.com/a/white_oak_veneer
+American walnut veneer — https://polyhaven.com/a/american_walnut_veneer
+Wood floor — https://polyhaven.com/a/wood_floor
+Clay plaster — https://polyhaven.com/a/clay_plaster
+Rough linen — https://polyhaven.com/a/rough_linen
+Ceramic vase — https://polyhaven.com/a/ceramic_vase_03
+Garden panorama — https://polyhaven.com/a/garden_nook
+Potted plants — https://polyhaven.com/a/potted_plant_01 and https://polyhaven.com/a/potted_plant_04
+Binder notebook — https://polyhaven.com/a/binder_notebook
+Circuit board — https://polyhaven.com/a/circuit_board
+Earlier study furnishings in this directory — https://polyhaven.com/a/mid_century_lounge_chair and https://polyhaven.com/a/desk_lamp_arm_01
+
+SheenChair · Eric Chadwick, © 2020 Wayfair, LLC · CC0
+https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/SheenChair
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Web adaptations include texture resizing, mesh simplification, wood and upholstery
+finishes, the photographed garden at night and the woven pad. The circuit-board
+print is rendered from the board model. Ambient occlusion and both reflection
+panoramas are baked from this room. The monitor previews come from the project page.
