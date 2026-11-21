@@ -284,6 +284,32 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   const seatPillow=rounded(.19,.39,.43,-.19,.73,-.86,mossLinen,windowSeat,.052);
   seatPillow.rotation.z=.23;
 
+  // A recessed plinth casts a narrow shadow below the book bench at the near window.
+  const bookBench = group(-2.96, 0, 2.38);
+  bookBench.rotation.y = Math.PI / 2;
+  box(1.08,.075,.31,0,.045,0,walnut,bookBench);
+  box(1.23,.032,.38,0,.098,0,paleOak,bookBench);
+  box(1.23,.032,.38,0,.475,0,paleOak,bookBench);
+  box(1.21,.347,.017,0,.287,-.18,walnut,bookBench);
+  for (const x of [-.60,.10,.60]) box(.029,.345,.38,x,.286,0,paleOak,bookBench);
+
+  const binding = [mossLinen,cream,terracotta,walnut,mossLinen,cream];
+  let spineX = -.405;
+  for (const [i,width] of [.050,.042,.056,.040,.064,.046].entries()) {
+    const height = [.272,.242,.253,.282,.233,.258][i];
+    const book = group(spineX,.114,.039,bookBench);
+    box(width-.006,height-.008,.219,0,height/2,-.003,cream,book);
+    for (const side of [-1,1]) box(.003,height,.229,side*(width-.003)/2,height/2,0,binding[i],book);
+    box(width,height,.006,0,height/2,.112,binding[i],book);
+    box(width*.65,.004,.001,0,height*.76,.116,brass,book);
+    spineX += width+.009;
+  }
+  for (const [i,cover] of [mossLinen,cream,walnut].entries()) {
+    const folio = rounded(.296,.025,.236,.342,.128+i*.027,.026,cover,bookBench,.002);
+    folio.rotation.y = .04-i*.029;
+  }
+  rounded(.92,.041,.33,-.05,.511,0,mossLinen,bookBench,.012);
+
   // Woven studio rug
   const rug = add(new THREE.PlaneGeometry(2.64,2.30),rugMat,-2.08,.009,.88);
   rug.name='rug';
@@ -750,7 +776,7 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   setPreview(previewUrl);
 
   // A light ash writing chair with a continuous curved plywood back and a linen seat.
-  const writingChair=group(-.53,0,.53,desk);
+  const writingChair=group(-.59,0,.55,desk);
   writingChair.rotation.y=-.94;
   const seat=add(new THREE.SphereGeometry(1,56,24),paleOak,0,.438,0,writingChair);
   seat.scale.set(.245,.023,.222);
