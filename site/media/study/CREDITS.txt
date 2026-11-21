@@ -1,11 +1,13 @@
-Study entrance · third-party assets
+Study entrance · asset sources
 
-Poly Haven · CC0 · https://polyhaven.com/license
+Active Poly Haven materials · CC0 · https://polyhaven.com/license
 White oak veneer — https://polyhaven.com/a/white_oak_veneer
-American walnut veneer — https://polyhaven.com/a/american_walnut_veneer
 Wood floor — https://polyhaven.com/a/wood_floor
 Clay plaster — https://polyhaven.com/a/clay_plaster
 Rough linen — https://polyhaven.com/a/rough_linen
+
+Earlier reference assets retained in the project · Poly Haven · CC0
+American walnut veneer — https://polyhaven.com/a/american_walnut_veneer
 Ceramic vase — https://polyhaven.com/a/ceramic_vase_03
 Garden panorama — https://polyhaven.com/a/garden_nook
 Potted plants — https://polyhaven.com/a/potted_plant_01 and https://polyhaven.com/a/potted_plant_04
@@ -17,7 +19,22 @@ SheenChair · Eric Chadwick, © 2020 Wayfair, LLC · CC0
 https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/SheenChair
 https://creativecommons.org/publicdomain/zero/1.0/
 
-Web adaptations include texture resizing, mesh simplification, wood and upholstery
-finishes, the photographed garden at night and the woven pad. The circuit-board
-print is rendered from the board model. Ambient occlusion and both reflection
-panoramas are baked from this room. The monitor previews come from the project page.
+2026-11-22 selected study layout
+
+The room, furniture, desktop props, glazing and near foliage use native
+Three.js geometry. The monitor previews show the project page.
+
+ming-courtyard-far-day.webp and ming-courtyard-far-night.webp derive from the
+glass area in the user-supplied reference/user-layout.png. The daylight image
+was edited with OpenAI image generation to remove the foreground desk lamp.
+The resulting garden was relit with the same image-generation tool for the
+night image. Both images were framed and encoded locally to 880 × 652 WebP and
+appear on the distant garden surface in the 3D scene. study-mountain-art.webp
+is the small framed artwork area from the supplied reference. The public
+redistribution license for that supplied image and its derivatives is unspecified.
+
+The plaster albedo is derived from the credited Poly Haven clay plaster.
+tools/weave-rug.py generates the repeating jute material.
+The RGB lighting textures record indirect occlusion, window sun and desk-lamp
+visibility, respectively. They and both room reflections are regenerated with
+this layout by tools/bake-study.py.

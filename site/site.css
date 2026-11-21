@@ -95,6 +95,17 @@ body.is-night .theme-switch .icon-moon { display: none; }
   background: #d2c9b8;
 }
 body.is-night .room-screen { background: #161513; }
+#room-poster {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  transition: opacity .18s ease-out;
+}
+.room-screen.room-revealing #room-poster { opacity: 0; }
 #lab-view {
   width: 100%;
   height: 100%;
@@ -2259,7 +2270,7 @@ body.is-night .metric-bar { background: #4c4a45; }
 body.is-night .room-light-switch { color: #ffdfad; background: #302a27d9; border-color: #9b847c66; }
 body.flying .room-light-switch { visibility: hidden; }
 
-/* The entrance is opaque until the fully textured room has reached the GPU. */
+/* Keep the preview visible until the fully textured room has reached the GPU. */
 .study-loading {
   position:absolute; inset:0; z-index:3; display:grid; place-items:center;
   background:radial-gradient(ellipse at 50% 46%, #fffdf6, #f1ede2 78%); color:#393d35;
@@ -2274,7 +2285,24 @@ body.is-night .study-loading { background:radial-gradient(ellipse at 50% 46%,#30
 #loading-status { font-size:.85rem; opacity:.76; }
 .study-loading-track { width:150px; height:2px; background:#8e897e40; overflow:hidden; margin-top:5px; }
 #loading-progress { display:block; height:100%; background:#ad6c50; transform-origin:left; transform:scaleX(0); transition:transform .2s; }
-#retry-room { background:transparent; color:inherit; border:1px solid currentColor; border-radius:5px; padding:6px 14px; }
+.study-loading-actions { display:flex; justify-content:center; flex-wrap:wrap; gap:8px; }
+.study-loading-actions button { background:transparent; color:inherit; border:1px solid currentColor; border-radius:5px; padding:6px 14px; }
+#open-paper-fallback { background:var(--paper); color:var(--ink); border-color:transparent; }
+#room-poster:not([hidden]) ~ .study-loading {
+  background:none;
+  place-items:end center;
+  padding:0 16px max(18px,env(safe-area-inset-bottom));
+}
+#room-poster:not([hidden]) ~ .study-loading .study-loading-content {
+  gap:6px;
+  padding:8px 14px 10px;
+  border-radius:var(--radius-md);
+  background:#1b1915dc;
+  color:#fffaf1;
+}
+#room-poster:not([hidden]) ~ .study-loading :is(svg,strong) { display:none; }
+.room-failed .study-loading-track { display:none; }
+.room-failed .room-light-switch { z-index:4; }
 @media (prefers-reduced-motion:no-preference) {
   .draw-monitor,.draw-desk { stroke-dasharray:1; animation:study-outline 1.45s ease-out both; }
   .draw-desk { animation-delay:.76s; }
@@ -2282,7 +2310,7 @@ body.is-night .study-loading { background:radial-gradient(ellipse at 50% 46%,#30
   @keyframes study-outline { from {stroke-dashoffset:1;} to {stroke-dashoffset:0;} }
   @keyframes study-appear { from {opacity:0;transform:translateY(5px);} to {opacity:1;transform:none;} }
 }
-@media (prefers-reduced-motion:reduce) { .study-loading,#loading-progress {transition:none;} }
+@media (prefers-reduced-motion:reduce) { .study-loading,#loading-progress,#room-poster {transition:none;} }
 
 @media (max-width:600px) {
   .nav-inner { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:5px 8px; padding-block:5px; }

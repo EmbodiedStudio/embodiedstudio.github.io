@@ -1,13 +1,12 @@
 import { packRoomModels } from './pack-room-models.mjs';
 import { build, transform } from 'esbuild';
 import { roomDownloads } from './room-downloads.mjs';
-import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-await mkdir('_site', { recursive: true });
+await rm('_site', { recursive: true, force: true });
 await cp('site', '_site', { recursive: true });
 await packRoomModels('_site/media/study');
-await rm('_site/assets', { recursive: true, force: true });
 const result = await build({
   entryPoints: ['site/lab.js'],
   outdir: '_site/assets',
@@ -34,7 +33,9 @@ function collect(file) {
 for(const [file,info] of Object.entries(result.metafile.outputs)) {
   if(['site/room.js','site/vendor/three.module.js'].includes(info.entryPoint)) collect(file);
 }
-for(const dep of entry.imports) nativeFiles.delete(dep.path);
+for(const dep of entry.imports) {
+  if(dep.kind==='import-statement') nativeFiles.delete(dep.path);
+}
 const packs=await roomDownloads();
 const boot=`<script>
 window.studyPacks=${JSON.stringify(packs)};
@@ -42,7 +43,7 @@ if(!location.hash && new URLSearchParams(location.search).get('view')!=='paper')
   for(const url of ${JSON.stringify([...nativeFiles].map(publicPath))}){
     const link=document.createElement('link');link.rel='modulepreload';link.href=url;document.head.append(link);
   }
-  if('DecompressionStream' in window){
+  if(typeof DecompressionStream==='function'){
     window.studyDownloads=window.studyPacks.map(pack=>({...pack,
       response:fetch(pack.url,{cache:'force-cache'}).catch(()=>null)
     }));

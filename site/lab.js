@@ -3,6 +3,8 @@ import { tr } from './locale.js';
 const canvas = document.getElementById('lab-view');
 const panel = document.getElementById('paper-page');
 const roomScreen = document.getElementById('room-screen');
+const roomPoster = document.getElementById('room-poster');
+const posterPortrait = matchMedia('(max-aspect-ratio: 3/4)');
 const video = panel.querySelector('video');
 const themeToggles = [...document.querySelectorAll('[data-theme-toggle]')];
 const themeMeta = document.querySelector('meta[name="theme-color"]');
@@ -16,8 +18,28 @@ let studyPromise;
 const curtain = document.getElementById('room-loading');
 const statusLine = document.getElementById('loading-status');
 const loadBar = document.getElementById('loading-progress');
-const retry = document.getElementById('retry-room');
-retry.addEventListener('click', () => location.reload());
+const recovery = document.getElementById('room-recovery');
+document.getElementById('retry-room').addEventListener('click', () => location.reload());
+document.getElementById('open-paper-fallback').addEventListener('click', () => presentPaper(true, true));
+posterPortrait.addEventListener('change', updateRoomPoster);
+
+function updateRoomPoster() {
+  if (roomReady || roomScreen.classList.contains('room-revealing') || document.body.classList.contains('paper-active')) return;
+  const theme = isNight ? 'night' : 'day';
+  const format = posterPortrait.matches ? 'Phone' : 'Desktop';
+  const source = roomPoster.dataset[theme + format];
+  if (roomPoster.getAttribute('src') === source) {
+    roomPoster.hidden = !roomPoster.complete || !roomPoster.naturalWidth;
+    return;
+  }
+  roomPoster.hidden = true;
+  roomPoster.src = source;
+  roomPoster.decode().then(() => {
+    if (roomReady || roomScreen.classList.contains('room-revealing') || roomPoster.getAttribute('src') !== source) return;
+    roomPoster.hidden = false;
+    performance.mark('room-poster-decoded');
+  }).catch(() => {});
+}
 
 function lockRoom() {
   roomReady = false;
@@ -26,11 +48,14 @@ function lockRoom() {
   document.body.classList.remove('room-ready');
   curtain.hidden = false;
   curtain.classList.remove('reveal');
+  roomScreen.classList.remove('room-revealing');
+  updateRoomPoster();
 }
 function failRoom() {
   lockRoom();
+  roomScreen.classList.add('room-failed');
   statusLine.textContent = tr('书房资源未能完整载入', 'The study could not finish loading');
-  retry.hidden = false;
+  recovery.hidden = false;
 }
 
 function preparePaper() {
@@ -75,6 +100,7 @@ function applyTheme(nextNight, persist = true) {
   }
   cameraControl?.setNight(isNight);
   cameraControl?.setPreview(previewUrl());
+  if (roomStarting || roomScreen.classList.contains('room-failed')) updateRoomPoster();
   if (persist) {
     try {
       localStorage.setItem(THEME_KEY, isNight ? '1' : '0');
@@ -92,6 +118,7 @@ applyTheme(isNight, false);
 
 window.addEventListener('paper-language-change', () => {
   applyTheme(isNight, false);
+  if (roomScreen.classList.contains('room-failed')) failRoom();
 });
 
 // Active section scroll-spy for sticky navigation
@@ -267,24 +294,9 @@ async function initRoom() {
   if (cameraControl || roomStarting) return;
   roomStarting = true;
   lockRoom();
-  // Include initial document loading in the opening sequence. A later first visit
-  // from the paper starts its own sequence when the room is requested.
-  const earliestReveal = (performance.getEntriesByName('paper-opened').length ? performance.now() : 0) + 3000;
   try {
     const packed = loadPackedRoom();
-    if (!packed && location.protocol !== 'file:' && !document.querySelector('link[data-room-prefetch]')) {
-      for (const model of ['potted_plant_01','lounge-chair','circuit_board']) {
-        const link = document.createElement('link');
-        link.rel = 'preload';
-        link.as = 'fetch';
-        link.crossOrigin = 'anonymous';
-        link.fetchPriority = 'low';
-        link.href = './media/study/' + model + '.glb';
-        link.dataset.roomPrefetch = '';
-        document.head.append(link);
-      }
-    }
-    const [THREE, { buildHome }, resolveAsset] = await Promise.all([import('./vendor/three.module.js'), import('./room.js'), packed]);
+    const [THREE, { buildHome }, resolveAsset] = await Promise.all([import('./vendor/three.module.js'), import('./room.js'), packed?.catch(() => undefined)]);
     if (document.body.classList.contains('paper-active')) return;
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.6));
@@ -298,7 +310,8 @@ async function initRoom() {
     const camera = new THREE.PerspectiveCamera(45, 1, .025, 24);
     const deskShot = new THREE.PerspectiveCamera();
     let queuedDraw = 0, warmupRunning = false, assetsReady = false, failed = false;
-    let version = 0, finishing = false, openedOnce = false, progress = 0;
+    let version = 0, finishing = false, progress = 0;
+    canvas.addEventListener('webglcontextlost', () => { failed = true; failRoom(); });
     function preparePrograms() {
       if (warmupRunning || assetsReady || !roomVisible) return;
       warmupRunning = true;
@@ -326,27 +339,26 @@ async function initRoom() {
         if (state === gl.WAIT_FAILED) { failed = true; failRoom(); return; }
         performance.mark('room-frame-complete');
         showProgress(1);
-        const fade = reducedMotion.matches ? 0 : 180;
-        setTimeout(() => {
+        curtain.classList.add('reveal');
+        roomScreen.classList.add('room-revealing');
+        function showRoom() {
           if (current !== version || failed) return;
-          curtain.classList.add('reveal');
-          setTimeout(() => {
-            if (current !== version || failed) return;
-            curtain.hidden = true;
-            canvas.inert = false;
-            canvas.tabIndex = 0;
-            roomReady = openedOnce = true;
-            document.body.classList.add('room-ready');
-            performance.mark('room-interactive');
-          },fade);
-        },openedOnce ? 0 : Math.max(0,earliestReveal-performance.now()-fade));
+          curtain.hidden = roomPoster.hidden = true;
+          canvas.inert = false;
+          canvas.tabIndex = 0;
+          roomReady = true;
+          document.body.classList.add('room-ready');
+          performance.mark('room-interactive');
+        }
+        if (reducedMotion.matches) showRoom();
+        else setTimeout(showRoom,180);
       }
       requestAnimationFrame(waitForFrame);
     }
     const { scene, monitorSurface, screenWidth, screenHeight, center, normal, setPreview, setHover, setNight } =
-      buildHome(previewUrl(), geometryAdded => {
-        renderer.shadowMap.needsUpdate = true;
-        if ((roomReady || geometryAdded) && !queuedDraw) queuedDraw=requestAnimationFrame(() => {
+      buildHome(previewUrl(), shadowChanged => {
+        if (shadowChanged) renderer.shadowMap.needsUpdate = true;
+        if ((roomReady || shadowChanged) && !queuedDraw) queuedDraw=requestAnimationFrame(() => {
           queuedDraw=0;
           if (roomReady) draw();
           else preparePrograms();
@@ -354,43 +366,49 @@ async function initRoom() {
       },{
         resolveAsset,
         start() {
+          if (roomReady || failed) return;
           version++;
           finishing = assetsReady = false;
-          if (failed) return;
           progress = resolveAsset ? .72 : 0;
           showProgress(progress);
           lockRoom();
           statusLine.textContent=tr('正在准备三维书房','Preparing the 3D study');
         },
         progress(url,loaded,total) { if (!failed) showProgress(resolveAsset ? .72+.20*loaded/total : .92*loaded/total); },
-        error() { failed = true; failRoom(); },
+        error() { if (!roomReady) { failed = true; failRoom(); } },
         ready() { assetsReady = true; finishRoom(); }
       });
     const entryOrientation = new THREE.Quaternion();
     const motion = new THREE.Euler(0, 0, 0, 'YXZ');
     const ray = new THREE.Raycaster();
     let pointer = null, yaw = 0, pitch = 0, animation = 0, hoveringScreen = false, roomVisible = true;
+    let frameWidth = 1, frameHeight = 1, frameCenter = .5;
 
     function draw() {
       if (!assetsReady || !roomVisible) return;
       renderer.render(scene, camera);
     }
     function entrance() {
-      // Parallel desk and camera axes keep the worktop horizontal. Offset the camera itself
-      // to leave breathing room on the garden side, without turning it toward the monitor.
-      const wide = THREE.MathUtils.smoothstep(camera.aspect,.72,1.45);
+      const phoneAspect = 390 / 844, desktopAspect = 1440 / 900;
+      const wide = THREE.MathUtils.smoothstep(camera.aspect, phoneAspect, desktopAspect);
       const mix = (phone, landscape) => THREE.MathUtils.lerp(phone, landscape, wide);
-      const z = mix(1.19,1.30);
-      deskShot.position.set(mix(.30,-.13),mix(1.34,1.23),z);
-      deskShot.lookAt(-2.85,mix(1.01,1.05),z);
-      return { position: deskShot.position.clone(), orientation: deskShot.quaternion.clone() };
+      const horizontalHalfSpan = mix(.478, desktopAspect * Math.tan(44.7 * Math.PI / 360));
+      const viewAspect = Math.max(phoneAspect, Math.min(camera.aspect, desktopAspect));
+      camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(horizontalHalfSpan / viewAspect));
+      deskShot.position.set(mix(.536, 0), mix(1.06, 1.052), mix(1.03, 1.60));
+      deskShot.rotation.set(0, 0, 0, 'YXZ');
+      return { position: deskShot.position.clone(), orientation: deskShot.quaternion.clone(), frameCenter: mix(.461, .435) };
+    }
+    function setFraming(nextCenter) {
+      frameCenter = nextCenter;
+      camera.setViewOffset(frameWidth, frameHeight, 0, frameHeight * (.5 - frameCenter), frameWidth, frameHeight);
     }
     function fitMonitor() {
       const halfHeight = Math.tan(THREE.MathUtils.degToRad(camera.fov * .5));
       const distance = Math.min(screenHeight / (2 * halfHeight), screenWidth / (2 * halfHeight * camera.aspect)) * .985;
       deskShot.position.copy(center).addScaledVector(normal, distance);
       deskShot.lookAt(center);
-      return { position: deskShot.position.clone(), orientation: deskShot.quaternion.clone() };
+      return { position: deskShot.position.clone(), orientation: deskShot.quaternion.clone(), frameCenter: .5 };
     }
     function lookAround(dx, dy) {
       yaw = Math.max(-.34, Math.min(.34, yaw - dx * .0028));
@@ -399,25 +417,30 @@ async function initRoom() {
       draw();
     }
     function reset(keepLook = false) {
-      const { position, orientation } = entrance();
+      const pose = entrance();
       if (!keepLook) yaw = pitch = 0;
-      camera.position.copy(position);
-      entryOrientation.copy(orientation);
+      camera.position.copy(pose.position);
+      entryOrientation.copy(pose.orientation);
+      setFraming(pose.frameCenter);
       lookAround(0, 0);
     }
     function resize() {
       const w = canvas.clientWidth, h = canvas.clientHeight;
       if (!w || !h) return;
+      frameWidth = w;
+      frameHeight = h;
       camera.aspect = w / h;
-      camera.fov = THREE.MathUtils.lerp(57,39,THREE.MathUtils.smoothstep(camera.aspect,.72,1.45));
-      camera.updateProjectionMatrix();
       renderer.setSize(w, h, false);
       if (!flying && !document.body.classList.contains('paper-active')) reset(true);
-      else draw();
+      else {
+        setFraming(frameCenter);
+        draw();
+      }
     }
     function move(pose, duration, onProgress, onComplete) {
       cancelAnimationFrame(animation);
       const start = camera.position.clone(), rotation = camera.quaternion.clone();
+      const startFrameCenter = frameCenter;
       const begin = performance.now();
       function frame(time) {
         const fraction = Math.min(1, (time - begin) / duration);
@@ -426,6 +449,7 @@ async function initRoom() {
           : 1 - Math.pow(-2 * fraction + 2, 3) / 2;
         camera.position.copy(start).lerp(pose.position, eased);
         camera.quaternion.copy(rotation).slerp(pose.orientation, eased);
+        setFraming(THREE.MathUtils.lerp(startFrameCenter, pose.frameCenter, eased));
         draw();
         onProgress(fraction);
         if (fraction < 1) animation = requestAnimationFrame(frame);

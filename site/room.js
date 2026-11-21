@@ -1,9 +1,27 @@
 import * as THREE from './vendor/three.module.js';
-import { MeshoptDecoder } from './vendor/meshopt_decoder.mjs';
-import { GLTFLoader } from './vendor/GLTFLoader.js';
 
-const material = (color, roughness = .7, metalness = 0, map) =>
-  new THREE.MeshStandardMaterial({ color, roughness, metalness, ...(map ? { map } : {}) });
+const directLighting = THREE.ShaderChunk.lights_fragment_begin;
+const directionalShadow = directLighting.split('\n')
+  .find(line => line.includes('directLight.color') && line.includes('directionalShadowMap'));
+// Light texture channels store indirect occlusion, window-sun visibility and desk-lamp visibility.
+const pointLightInfo = directLighting.split('\n').find(line => line.includes('getPointLightInfo('));
+const bakedDirectLighting = directLighting.replace(directionalShadow, `
+  #if UNROLLED_LOOP_INDEX == 0
+    directLight.color *= texture2D( aoMap, vAoMapUv ).g;
+  #else
+    ${directionalShadow}
+  #endif
+`).replace(pointLightInfo, `${pointLightInfo}
+  #if UNROLLED_LOOP_INDEX == 0
+    directLight.color *= texture2D( aoMap, vAoMapUv ).b;
+  #endif
+`);
+function useBakedLighting(shader) {
+  shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_begin>',bakedDirectLighting);
+}
+
+const material = (color, roughness = .7, metalness = 0) =>
+  new THREE.MeshStandardMaterial({ color, roughness, metalness });
 
 function imageTexture(width, height, paint) {
   const canvas = document.createElement('canvas');
@@ -16,110 +34,166 @@ function imageTexture(width, height, paint) {
   return texture;
 }
 
-function soften(w, h, d, radius = .038) {
-  const r = Math.min(radius, .21 * w, .21 * h, .21 * d);
+function softenedBox(width, height, depth, radius) {
+  const r = Math.min(radius, .24 * width, .24 * height, .24 * depth);
+  const x = width / 2 - r, y = height / 2 - r;
   const outline = new THREE.Shape();
-  const x = w / 2 - r, y = h / 2 - r;
   outline.moveTo(-x, -y);
   outline.lineTo(x, -y);
   outline.lineTo(x, y);
   outline.lineTo(-x, y);
   outline.closePath();
-  const geo = new THREE.ExtrudeGeometry(outline, {
-    depth: d - 2 * r,
-    bevelThickness: r,
-    bevelSize: r,
-    bevelSegments: 4,
-    steps: 1
+  const geometry = new THREE.ExtrudeGeometry(outline, {
+    depth: depth - 2 * r, bevelThickness: r, bevelSize: r, bevelSegments: 4, steps: 1
   });
-  geo.translate(0, 0, -d / 2 + r);
-  return geo;
+  geometry.translate(0, 0, -depth / 2 + r);
+  return geometry;
+}
+
+function roundRect(width, height, radius) {
+  const x = width / 2, y = height / 2, r = radius;
+  const shape = new THREE.Shape();
+  shape.moveTo(-x + r, -y);
+  shape.lineTo(x - r, -y);
+  shape.quadraticCurveTo(x, -y, x, -y + r);
+  shape.lineTo(x, y - r);
+  shape.quadraticCurveTo(x, y, x - r, y);
+  shape.lineTo(-x + r, y);
+  shape.quadraticCurveTo(-x, y, -x, y - r);
+  shape.lineTo(-x, -y + r);
+  shape.quadraticCurveTo(-x, -y, -x + r, -y);
+  return shape;
+}
+
+// Cylinder segments share one mesh for the fine twigs and structural joinery.
+function taperedSegments(segments, surface, granularity = 9) {
+  const geometry = new THREE.CylinderGeometry(.48, 1, 1, granularity);
+  const group = new THREE.InstancedMesh(geometry, surface, segments.length);
+  const axis = new THREE.Vector3(0, 1, 0), matrix = new THREE.Object3D();
+  for (const [index, { start, end, radius }] of segments.entries()) {
+    matrix.position.copy(start).lerp(end, .5);
+    matrix.quaternion.setFromUnitVectors(axis, end.clone().sub(start).normalize());
+    matrix.scale.set(radius, start.distanceTo(end), radius);
+    matrix.updateMatrix();
+    group.setMatrixAt(index, matrix.matrix);
+  }
+  group.castShadow = group.receiveShadow = true;
+  return group;
+}
+
+function loftGeometry(count, sides, makeVertex) {
+  const positions = [], uv = [], faces = [];
+  for (let i = 0; i <= count; i++) for (let j = 0; j <= sides; j++) {
+    positions.push(...makeVertex(i / count, j / sides));
+    uv.push(i / count, j / sides);
+  }
+  for (let i = 0; i < count; i++) for (let j = 0; j < sides; j++) {
+    const a = i * (sides + 1) + j, b = a + sides + 1;
+    faces.push(a, a + 1, b, b, a + 1, b + 1);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geometry.setIndex(faces);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function plantLeaves(points, scale = 1, broad = false) {
+  const outline = new THREE.Shape();
+  outline.moveTo(-.020, 0);
+  outline.quadraticCurveTo(broad?-.011:-.003,broad?-.025:-.010,.023,.002);
+  outline.quadraticCurveTo(broad?-.004:.007,broad?.027:.014,-.020,0);
+  const leaf = new THREE.ShapeGeometry(outline, 5);
+  const position = leaf.attributes.position;
+  for (let i = 0; i < position.count; i++) position.setZ(i, .003 * Math.cos(position.getX(i) * 95));
+  leaf.computeVertexNormals();
+  const finish = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .56, side: THREE.DoubleSide });
+  const mesh = new THREE.InstancedMesh(leaf, finish, points.length);
+  const pivot = new THREE.Object3D(), tint = new THREE.Color();
+  const greens = [0x555b29, 0x617540, 0x727337, 0x88934e, 0x596344];
+  for (const [index, point] of points.entries()) {
+    const n = index + 1;
+    pivot.position.copy(point);
+    pivot.rotation.set(broad ? .37*Math.sin(n*1.731) : n*1.731,
+      broad ? .91*Math.sin(n*2.091) : n*2.091,n*2.39996);
+    pivot.scale.setScalar(scale * (.67 + .48 * (.5 + .5 * Math.sin(n * 2.41))));
+    pivot.updateMatrix();
+    mesh.setMatrixAt(index, pivot.matrix);
+    mesh.setColorAt(index, tint.setHex(greens[index % greens.length]));
+  }
+  mesh.castShadow = mesh.receiveShadow = true;
+  return mesh;
 }
 
 export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   const loading = new THREE.LoadingManager(lifecycle.ready, lifecycle.progress, lifecycle.error);
   loading.onStart = lifecycle.start;
-  if (lifecycle.resolveAsset) loading.setURLModifier(lifecycle.resolveAsset);
-  const scene = new THREE.Scene();
-  const dayBg = new THREE.Color(0xd8d0c3);
-  const nightBg = new THREE.Color(0x141312);
-  scene.background = dayBg.clone();
-
-  const loader = new THREE.TextureLoader(loading);
-  function surfaceMap(url, repeatX, repeatY, color = true) {
-    const map = loader.load(url, () => onUpdate());
-    map.wrapS = map.wrapT = THREE.RepeatWrapping;
-    map.repeat.set(repeatX, repeatY);
-    map.anisotropy = 8;
-    if (color) map.colorSpace = THREE.SRGBColorSpace;
-    return map;
+  const secondary = new THREE.LoadingManager();
+  if (lifecycle.resolveAsset) {
+    loading.setURLModifier(lifecycle.resolveAsset);
+    secondary.setURLModifier(lifecycle.resolveAsset);
   }
-  const plaster = material(0xfffaf1, .94, 0, surfaceMap('./media/study/clay_plaster-color.webp', 3, 1.5));
-  plaster.normalMap = surfaceMap('./media/study/clay_plaster-normal.webp', 3, 1.5, false);
-  plaster.normalScale.setScalar(.055);
-  const chalk = material(0xe7dacb, .88);
-  const edge = material(0xac9881, .64);
-  const oak = material(0xe8c49e, .42, 0, surfaceMap('./media/study/american_walnut_veneer-color.webp', 1.2, 1));
-  oak.normalMap = surfaceMap('./media/study/american_walnut_veneer-normal.webp', 1.2, 1, false);
-  oak.normalScale.setScalar(.32);
-  oak.roughnessMap = surfaceMap('./media/study/american_walnut_veneer-rough.webp', 1.2, 1, false);
-  oak.roughness = .88;
-  const paleOak = material(0xfff0d9, .86, 0, surfaceMap('./media/study/white_oak_veneer-diffuse.webp', 1, 1));
-  paleOak.normalMap = surfaceMap('./media/study/white_oak_veneer-nor_gl.webp', 1, 1, false);
-  paleOak.roughnessMap = surfaceMap('./media/study/white_oak_veneer-rough.webp', 1, 1, false);
-  paleOak.normalScale.setScalar(.42);
-  const walnut = oak.clone();
-  walnut.color.setHex(0xb69a7c);
-  const brass = material(0xc9a36a, .26, .78);
-  const ink = material(0x232422, .30, .26);
-  const aluminum = material(0xc4c8c4, .24, .72);
-  const cream = material(0xf3eee3, .58);
-  const ceramic = new THREE.MeshPhysicalMaterial({
-    color:0xf5ede2, roughness:.31, clearcoat:.68, clearcoatRoughness:.19
+  const loader = new THREE.TextureLoader(loading);
+  const previewLoader = new THREE.TextureLoader(secondary);
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xb7a286);
+  const lighting = !lifecycle.skipBakedLighting;
+
+  function surfaceMap(url, isColor = true) {
+    const texture = loader.load(url, () => onUpdate());
+    texture.anisotropy = 8;
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    if (isColor) texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
+  }
+
+  const plaster = material(0xe2cdb7, .93);
+  plaster.map=surfaceMap('./media/study/study-plaster-albedo.webp');
+  plaster.color.multiplyScalar(1.032);
+  plaster.normalMap = surfaceMap('./media/study/clay_plaster-normal.webp', false);
+  plaster.normalScale.setScalar(.115);
+
+  const oak = new THREE.MeshPhysicalMaterial({
+    color:0xffead2,roughness:.71,clearcoat:.20,clearcoatRoughness:.48,
+    map:surfaceMap('./media/study/white_oak_veneer-diffuse.webp'),
+    normalMap:surfaceMap('./media/study/white_oak_veneer-nor_gl.webp',false),
+    roughnessMap:surfaceMap('./media/study/white_oak_veneer-rough.webp',false),
+    normalScale:new THREE.Vector2(.24,.24)
   });
-  const fabricColor = surfaceMap('./media/study/rough_linen-diffuse.webp', 3, 7);
-  const fabricNormal = surfaceMap('./media/study/rough_linen-nor_gl.webp', 3, 7, false);
-  const fabricRoughness = surfaceMap('./media/study/rough_linen-rough.webp', 3, 7, false);
-  const canvasFabric = new THREE.MeshPhysicalMaterial({
-    color: 0xe3d7c7, map: fabricColor, normalMap: fabricNormal, normalScale: new THREE.Vector2(.23,.23),
-    roughness: 1, roughnessMap: fabricRoughness, sheen: .6, sheenColor: 0xdfd4c1, sheenRoughness: .86
+  const frameWood=oak.clone();
+  frameWood.color.setHex(0xe6bd96);
+  const floorFinish = material(0xeee4d3, .92);
+  floorFinish.map = surfaceMap('./media/study/wood_floor-color.webp');
+  floorFinish.normalMap = surfaceMap('./media/study/wood_floor-normal.webp', false);
+  floorFinish.normalScale.setScalar(.41);
+  floorFinish.roughnessMap = surfaceMap('./media/study/wood_floor-rough.webp', false);
+  const linen = new THREE.MeshPhysicalMaterial({
+    color:0xf1e4d0, roughness: .92, sheen: .71, sheenColor: 0xe6d7bf, sheenRoughness: .83,
+    map:surfaceMap('./media/study/rough_linen-diffuse.webp'),
+    normalMap:surfaceMap('./media/study/rough_linen-nor_gl.webp', false),
+    normalScale:new THREE.Vector2(.42,.42)
   });
-  const terracotta = material(0xc96442, .62, .04);
-  const sage = material(0x4e665c, .84);
-
-  const floorMat = material(0xe7d3ba, .54, 0, surfaceMap('./media/study/wood_floor-color.webp', 3.4, 4));
-  floorMat.normalMap = surfaceMap('./media/study/wood_floor-normal.webp', 3.4, 4, false);
-  floorMat.normalScale.setScalar(.38);
-  floorMat.roughness = .93;
-  floorMat.roughnessMap = surfaceMap('./media/study/wood_floor-rough.webp',3.4,4,false);
-
-  const matTexture = surfaceMap('./media/study/woven-pad.webp',1,1);
-
-  // Woven studio rug texture
-  const rugTex = imageTexture(960, 768, ctx => {
-    ctx.fillStyle = '#8b968b';
-    ctx.fillRect(0, 0, 960, 768);
-    for (let y = 0; y < 768; y += 3) {
-      ctx.fillStyle = y % 4 ? '#b8bbac' : '#a3aa9d';
-      ctx.fillRect(0, y, 960, 1);
-    }
-    for (let x = 0; x < 960; x += 4) {
-      ctx.fillStyle = x % 3 ? '#efe5d333' : '#594d412b';
-      ctx.fillRect(x, 0, 1, 768);
-    }
-    for (const x of [32, 48, 908, 924]) {
-      ctx.fillStyle = '#b16549';
-      ctx.fillRect(x, 0, 5, 768);
+  const matteBlack = material(0x282725, .47, .30);
+  const anodized = new THREE.MeshPhysicalMaterial({
+    color: 0x242422, roughness: .34, metalness: .70, clearcoat: .20, clearcoatRoughness: .38
+  });
+  const stoneMap=imageTexture(224,224,ctx=>{
+    ctx.fillStyle='#eee6da';
+    ctx.fillRect(0,0,224,224);
+    for(let i=0;i<1400;i++) {
+      const x=(i*121.739+i*i*.015)%224,y=(i*81.27+i*i*.009)%224;
+      ctx.fillStyle=i%7?'rgba(104,74,43,.26)':'rgba(255,249,219,.62)';
+      ctx.beginPath();ctx.ellipse(x,y,.18+(i%10)*.056,.18+(i%7)*.068,i,0,Math.PI*2);ctx.fill();
     }
   });
-  const rugMat = canvasFabric.clone();
-  rugMat.map = rugTex;
-  rugMat.color.setHex(0xfff2dc);
-
-  const dayReflection = surfaceMap('./media/study/reflection-day.webp',1,1);
-  const nightReflection = surfaceMap('./media/study/reflection-night.webp',1,1);
-  dayReflection.mapping = nightReflection.mapping = THREE.EquirectangularReflectionMapping;
-  scene.environment = dayReflection;
+  const daySky = surfaceMap('./media/study/ming-courtyard-far-day.webp');
+  const nightSky = surfaceMap('./media/study/ming-courtyard-far-night.webp');
+  daySky.wrapS=nightSky.wrapS=THREE.ClampToEdgeWrapping;
+  daySky.wrapT=nightSky.wrapT=THREE.MirroredRepeatWrapping;
+  const dayReflection = lighting ? surfaceMap('./media/study/reflection-day.webp') : null;
+  const nightReflection = lighting ? surfaceMap('./media/study/reflection-night.webp') : null;
+  if (lighting) dayReflection.mapping = nightReflection.mapping = THREE.EquirectangularReflectionMapping;
 
   function group(x, y, z, parent = scene) {
     const node = new THREE.Group();
@@ -127,776 +201,561 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
     parent.add(node);
     return node;
   }
-  function add(geo, mat, x, y, z, parent = scene) {
-    const piece = new THREE.Mesh(geo, mat);
-    piece.position.set(x, y, z);
-    piece.castShadow = piece.receiveShadow = true;
-    parent.add(piece);
-    return piece;
+  function add(geometry, finish, x, y, z, parent = scene) {
+    const mesh = new THREE.Mesh(geometry, finish);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = mesh.receiveShadow = true;
+    parent.add(mesh);
+    return mesh;
   }
-  const box = (w, h, d, x, y, z, mat, parent) => add(new THREE.BoxGeometry(w, h, d), mat, x, y, z, parent);
-  const rounded = (w, h, d, x, y, z, mat, parent, radius) => add(soften(w, h, d, radius), mat, x, y, z, parent);
-  const cylinder = (top, bottom, h, x, y, z, mat, parent) => add(new THREE.CylinderGeometry(top, bottom, h, 28), mat, x, y, z, parent);
-  function rod(a, b, r, mat, parent) {
-    const first = new THREE.Vector3(...a), second = new THREE.Vector3(...b);
-    const piece = cylinder(r, r, first.distanceTo(second), 0, 0, 0, mat, parent);
-    piece.position.copy(first).lerp(second, .5);
-    piece.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), second.sub(first).normalize());
-    return piece;
-  }
-  function picture(width, height, x, y, z, texture, parent = scene) {
-    const plane = add(
-      new THREE.PlaneGeometry(width, height),
-      new THREE.MeshBasicMaterial({ map: texture, toneMapped: false }),
-      x, y, z, parent
-    );
-    plane.castShadow = plane.receiveShadow = false;
+  const box = (w, h, d, x, y, z, finish, parent) => add(new THREE.BoxGeometry(w,h,d), finish, x,y,z,parent);
+  const rounded = (w, h, d, r, x, y, z, finish, parent) => add(softenedBox(w,h,d,r),finish,x,y,z,parent);
+  const cylinder = (top, bottom, height, x, y, z, finish, parent, sides = 32) =>
+    add(new THREE.CylinderGeometry(top,bottom,height,sides),finish,x,y,z,parent);
+  const vaseShape = (profile, finish, x, y, z, parent, sides = 56) =>
+    add(new THREE.LatheGeometry(profile.map(([r,h]) => new THREE.Vector2(r,h)),sides),finish,x,y,z,parent);
+
+  function planarFace(name, w, h, x, y, z, rx, ry, finish, uvTransform) {
+    const geometry = new THREE.PlaneGeometry(w,h);
+    const uv = geometry.attributes.uv;
+    geometry.setAttribute('uv1', uv.clone());
+    if (uvTransform) for (let i=0; i<uv.count; i++) uv.setXY(i, ...uvTransform(uv.getX(i),uv.getY(i)));
+    const plane = add(geometry, finish, x, y, z);
+    plane.name = name;
+    plane.rotation.set(rx,ry,0);
     return plane;
   }
 
-  // Room architecture
-  box(6.9, .15, 8.1, 0, -.077, .35, floorMat).name='floor';
-  box(6.86, 3.08, .12, 0, 1.54, -3.71, plaster).name='back-wall';
-  box(.12, 3.08, 8.04, 3.43, 1.54, .34, plaster);
-  box(6.84, .112, 8.04, 0, 3.11, .34, chalk).name='ceiling';
-  box(6.84, .068, .064, 0, .034, -3.61, edge);
-  box(.061, .069, 8.0, 3.35, .034, .34, edge);
-  box(.13, .51, 8.04, -3.43, .255, .34, plaster);
-  box(.13, .46, 8.04, -3.43, 2.84, .34, plaster);
-
-  // A recessed garden window to the left of the monitor and a quiet plaster return behind it.
-  const daySky = surfaceMap('./media/study/window-garden.webp', 1, 1);
-  const nightSky = surfaceMap('./media/study/window-garden-night.webp',1,1);
-
-  const windowPanes = [];
-  for (const [i, z] of [-2.62, -.94, .74, 2.42].entries()) {
-    if (i === 1) continue;
-    if (i === 2) {
-      box(.15,3.04,3.36,-3.39,1.52,-.10,plaster).name='desk-wall';
-      box(.18,2.13,.035,-3.35,1.56,z+.83,paleOak);
-      continue;
+  // The visible window is in the front-facing plaster wall. A side window lights the wall and the writing area.
+  function windowWall(name, width, height, opening, x, z, rotation) {
+    const outline=new THREE.Shape();
+    outline.moveTo(-width/2,0); outline.lineTo(width/2,0); outline.lineTo(width/2,height);
+    outline.lineTo(-width/2,height); outline.closePath();
+    const [left,right,bottom,top]=opening;
+    const hole=new THREE.Path();
+    hole.moveTo(left,bottom); hole.lineTo(left,top); hole.lineTo(right,top); hole.lineTo(right,bottom); hole.closePath();
+    outline.holes.push(hole);
+    const geo=new THREE.ShapeGeometry(outline);
+    const uv=geo.attributes.uv, coords=geo.attributes.position, bakeUV=[];
+    for(let i=0;i<uv.count;i++) {
+      const u=coords.getX(i)/width+.5, v=coords.getY(i)/height;
+      uv.setXY(i,u*2.4,v*2); bakeUV.push(u,v);
     }
-    const glass = picture(1.69, 2.10, -3.40, 1.56, z, daySky);
-    glass.rotateY(Math.PI / 2);
-    const uv = glass.geometry.getAttribute('uv');
-    for (let j = 0; j < uv.count; j++) {
-      uv.setXY(j, (i===3 ? .27 : (3-i)/4) + uv.getX(j)/4, uv.getY(j));
-    }
-    windowPanes.push(glass);
-    box(.085, 2.14, .045, -3.35, 1.56, z - .83, walnut);
-    if (i !== 3) box(.05,.028,1.66,-3.34,1.73,z,walnut);
+    geo.setAttribute('uv1',new THREE.Float32BufferAttribute(bakeUV,2));
+    const mesh=add(geo,plaster,x,0,z);
+    mesh.rotation.y=rotation;
+    mesh.name=name;
+    mesh.userData.bakeCorners=[[-width/2,0,0],[width/2,0,0],[-width/2,height,0]];
+    return mesh;
   }
-  box(.29, .068, 8.04, -3.30, .52, .34, oak);
-  // Deep sill and a woven Roman shade give the opening a visible reveal.
-  box(.36,.036,1.70,-3.26,.795,2.42,paleOak);
-  box(.14,.29,1.69,-3.40,.648,2.42,plaster);
-  const shadeCloth=canvasFabric.clone();
-  shadeCloth.color.setHex(0xcfb997);
-  shadeCloth.transparent = true;
-  shadeCloth.opacity = .69;
-  shadeCloth.depthWrite = false;
-  const blind=add(new THREE.PlaneGeometry(1.625,.86,40,32),shadeCloth,-3.286,2.17,2.42);
-  blind.rotation.y=Math.PI/2;
-  const pleats=blind.geometry.attributes.position;
-  for(let i=0;i<pleats.count;i++){
-    const v=(pleats.getY(i)+.43)/.86;
-    pleats.setZ(i,.014*Math.cos(v*Math.PI*10)+.014*Math.pow(1-v,4));
+  const roomHeight=4.45, rearZ=-1.51;
+  plaster.side=THREE.DoubleSide;
+  const floor=planarFace('floor',4.60,4.83,0,0,.88,-Math.PI/2,0,floorFinish,(u,v)=>[v*2.60,(1-u)*2.54]);
+  floor.castShadow=false;
+  const backWall=windowWall('back-wall',4.58,roomHeight,[-1.854,-.336,.759,2.315],0,rearZ,0);
+  const leftWall=windowWall('left-wall',4.83,roomHeight,[-.65,1.15,.47,3.12],-2.29,.90,Math.PI/2);
+  const rightWall=planarFace('right-wall',4.83,roomHeight,2.29,roomHeight/2,.90,0,-Math.PI/2,plaster,(u,v)=>[u*2.3,v*2.3]);
+  const ceiling=planarFace('ceiling',4.59,4.83,0,roomHeight,.90,Math.PI/2,0,material(0xeee1d1,.94));
+  box(4.60,roomHeight,.12,0,roomHeight/2,3.33,plaster);
+  const skirting=material(0xb9a992,.83);
+  box(4.56,.049,.023,0,.024,rearZ+.013,skirting);
+  box(.024,.049,4.79,-2.278,.024,.90,skirting);
+  box(.024,.049,4.79,2.278,.024,.90,skirting);
+
+  const windowX=-1.095, sill=.759, lintel=2.315, windowW=1.518;
+  const windowGroup=group(windowX,sill,rearZ);
+  const frameHeight=lintel-sill;
+  const reveal=material(0xd7c2a6,.77);
+  for(const x of [-windowW/2,windowW/2]) {
+    box(.025,frameHeight,.13,x,frameHeight/2,-.06,reveal,windowGroup);
+    const jamb=rounded(.043,frameHeight,.052,.003,x*.967,frameHeight/2,-.088,frameWood,windowGroup);
+    jamb.name='window-jamb';
+    box(.012,frameHeight-.04,.028,x*.932,frameHeight/2,-.105,matteBlack,windowGroup);
   }
-  blind.geometry.computeVertexNormals();
-  box(.026,.020,1.626,-3.26,1.742,2.42,oak);
-  for (const [i,cover] of [walnut,sage].entries()) {
-    const volume=rounded(.148,.025,.216,-3.22,.827+i*.026,2.55,cover,scene,.003);
-    volume.rotation.y=.06-i*.10;
-  }
-  const reflectedGlass = new THREE.MeshPhysicalMaterial({
-    transparent:true, opacity:.04, color:0x81928f, roughness:.12, metalness:.76, depthWrite:false
+  rounded(windowW+.09,.030,.165,.003,0,.008,-.041,oak,windowGroup);
+  rounded(windowW+.02,.043,.046,.003,0,frameHeight-.020,-.084,frameWood,windowGroup);
+  box(windowW-.076,.015,.029,0,.027,-.105,matteBlack,windowGroup);
+  const glass=add(new THREE.PlaneGeometry(windowW-.08,frameHeight-.073),new THREE.MeshPhysicalMaterial({
+    color:0xd9ded2,roughness:.16,metalness:.35,transparent:true,opacity:.045,depthWrite:false
+  }),0,frameHeight/2,-.117,windowGroup);
+  glass.castShadow=glass.receiveShadow=false;
+
+  const blindFinish=linen.clone();
+  blindFinish.color.setHex(0xfff0e2);
+  blindFinish.emissive.setHex(0xf5e8d7);
+  blindFinish.emissiveMap=linen.map;
+  blindFinish.side=THREE.DoubleSide;
+  blindFinish.transparent=true;
+  blindFinish.opacity=.83;
+  const blind=loftGeometry(28,42,(u,v)=>{
+    const ripple=.0015*Math.sin(u*18+v*3)+.001*Math.cos(u*44);
+    const fold=Math.exp(-(((v-.92)*13)**2))*.030+.004*Math.sin(v*12*Math.PI);
+    return [(u-.5)*1.544,(1-v)*.454,fold+ripple];
   });
-  for (const pane of windowPanes) {
-    const reflection = new THREE.Mesh(pane.geometry,reflectedGlass);
-    reflection.position.z=.002;
-    pane.add(reflection);
-  }
-  // Outside the glazing, leaves interrupt the low sun before it reaches the desk.
-  const leafOutline = new THREE.Shape();
-  leafOutline.moveTo(-.074,0);
-  leafOutline.quadraticCurveTo(-.014,.036,.079,.006);
-  leafOutline.quadraticCurveTo(.013,-.035,-.074,0);
-  const gardenLeaves = new THREE.InstancedMesh(new THREE.ShapeGeometry(leafOutline,6),
-    new THREE.MeshStandardMaterial({color:0x70845c,side:THREE.DoubleSide}),160);
-  const sprig = new THREE.Object3D();
-  for (let i=0;i<gardenLeaves.count;i++) {
-    const a=i*2.39996, r=Math.sqrt((i%40+.5)/40);
-    const branch=Math.floor(i/40);
-    sprig.position.set(-3.88-.18*Math.sin(a),2.41+.36*r*Math.sin(a)-branch*.12,
-      -.15+branch*.68+.55*r*Math.cos(a));
-    sprig.rotation.set(.42*Math.sin(a),1.25+.45*Math.cos(a),a);
-    sprig.scale.setScalar(1.17+.28*Math.sin(i*4.7));
-    sprig.updateMatrix();
-    gardenLeaves.setMatrixAt(i,sprig.matrix);
-  }
-  gardenLeaves.castShadow=true;
-  scene.add(gardenLeaves);
-  const linen = canvasFabric.clone();
-  linen.color.setHex(0xfff4dc);
-  linen.side = THREE.DoubleSide;
-  linen.vertexColors = true;
-  for (const z of [-2.87, -.64, 2.85]) {
-    const fabric = new THREE.PlaneGeometry(.88, 2.48, 72, 18);
-    const pos = fabric.attributes.position;
-    const folds = [];
-    for (let j = 0; j < pos.count; j++) {
-      const x = pos.getX(j), y = pos.getY(j), t = (1.24 - y) / 2.48;
-      const light = .74 + .22 * (.5 + .5 * Math.cos(x * 55 + t * .32));
-      folds.push(light, light * .99, light * .97);
-      pos.setXYZ(j, x * (.80 + .24 * t), y + .014 * t * Math.cos(x * 57),
-        (.036 + .018 * t) * Math.cos(x * 55 + t * .32));
-    }
-    fabric.setAttribute('color',new THREE.Float32BufferAttribute(folds,3));
-    fabric.computeVertexNormals();
-    add(fabric, linen, -3.20, 1.61, z).rotation.y = Math.PI / 2;
-  }
+  const shade=add(blind,blindFinish,windowX,1.841,rearZ+.018);
+  shade.castShadow=false;
+  const romanEdge=rounded(1.554,.029,.033,.006,windowX,1.833,rearZ+.04,blindFinish);
+  romanEdge.castShadow=false;
+  rounded(1.569,.026,.032,.003,windowX,2.299,rearZ+.026,frameWood);
 
-  const inkPrint = surfaceMap('./media/study/circuit-study.webp',1,1);
-  const printPaper=material(0xfffcf5,.99,0,inkPrint);
-  // From the front, the sill plant and this smaller print flank the monitor at different heights.
-  const displayLedge = group(-3.22,1.66,.62);
-  box(.18,.023,.61,0,0,0,paleOak,displayLedge);
-  for (const [i,cover] of [sage,cream,walnut].entries()) {
-    const book=rounded(.115,.019,.19,.02,.022+.020*i,.14,cover,displayLedge,.002);
-    book.rotation.y=(i-1)*.035;
-  }
-  const studyPrint = group(.002,.012,-.13,displayLedge);
-  studyPrint.rotation.set(-.12,Math.PI/2,0,'YXZ');
-  box(.205,.236,.013,0,.118,0,walnut,studyPrint);
-  box(.195,.226,.002,0,.118,.007,cream,studyPrint);
-  add(new THREE.PlaneGeometry(.164,.193),printPaper,0,.118,.009,studyPrint);
-  // Low window joinery follows the glazing and turns into a reading seat at its far end.
-  const windowSeat=group(-2.94,0,-1.71);
-  box(.74,.37,2.92,0,.23,0,paleOak,windowSeat);
-  for(const z of [-1.02,0,1.02]){
-    box(.022,.31,.93,.38,.24,z,paleOak,windowSeat);
-    box(.014,.017,.17,.395,.34,z,walnut,windowSeat);
-  }
-  rounded(.83,.057,2.98,.015,.44,0,paleOak,windowSeat,.014);
-  rounded(.70,.105,2.52,.02,.517,-.09,canvasFabric,windowSeat,.037);
-  const mossLinen=canvasFabric.clone();
-  mossLinen.color.setHex(0x83947e);
-  const seatPillow=rounded(.19,.39,.43,-.19,.73,-.86,mossLinen,windowSeat,.052);
-  seatPillow.rotation.z=.23;
-
-  // A recessed plinth casts a narrow shadow below the book bench at the near window.
-  const bookBench = group(-2.96, 0, 2.38);
-  bookBench.rotation.y = Math.PI / 2;
-  box(1.08,.075,.31,0,.045,0,walnut,bookBench);
-  box(1.23,.032,.38,0,.098,0,paleOak,bookBench);
-  box(1.23,.032,.38,0,.475,0,paleOak,bookBench);
-  box(1.21,.347,.017,0,.287,-.18,walnut,bookBench);
-  for (const x of [-.60,.10,.60]) box(.029,.345,.38,x,.286,0,paleOak,bookBench);
-
-  const binding = [mossLinen,cream,terracotta,walnut,mossLinen,cream];
-  let spineX = -.405;
-  for (const [i,width] of [.050,.042,.056,.040,.064,.046].entries()) {
-    const height = [.272,.242,.253,.282,.233,.258][i];
-    const book = group(spineX,.114,.039,bookBench);
-    box(width-.006,height-.008,.219,0,height/2,-.003,cream,book);
-    for (const side of [-1,1]) box(.003,height,.229,side*(width-.003)/2,height/2,0,binding[i],book);
-    box(width,height,.006,0,height/2,.112,binding[i],book);
-    box(width*.65,.004,.001,0,height*.76,.116,brass,book);
-    spineX += width+.009;
-  }
-  for (const [i,cover] of [mossLinen,cream,walnut].entries()) {
-    const folio = rounded(.296,.025,.236,.342,.128+i*.027,.026,cover,bookBench,.002);
-    folio.rotation.y = .04-i*.029;
-  }
-  rounded(.92,.041,.33,-.05,.511,0,mossLinen,bookBench,.012);
-
-  // Woven studio rug
-  const rug = add(new THREE.PlaneGeometry(2.64,2.30),rugMat,-2.08,.009,.88);
-  rug.name='rug';
-  rug.rotation.x = -Math.PI/2;
-  rug.rotation.z = Math.PI/2;
-  rug.castShadow = false;
-  const occlusion = imageTexture(128,128,ctx => {
-    const gradient = ctx.createRadialGradient(64,64,0,64,64,64);
-    gradient.addColorStop(0,'rgba(36,26,20,.82)');
-    gradient.addColorStop(.48,'rgba(36,26,20,.36)');
-    gradient.addColorStop(1,'rgba(36,26,20,0)');
-    ctx.fillStyle=gradient;
-    ctx.fillRect(0,0,128,128);
-  });
-  function contactShadow(x,y,z,width,depth,opacity,parent = scene) {
-    const shadow = add(new THREE.PlaneGeometry(width,depth),
-      new THREE.MeshBasicMaterial({map:occlusion,transparent:true,opacity,depthWrite:false}),
-      x,y,z,parent);
-    shadow.rotation.x = -Math.PI/2;
-    shadow.castShadow = shadow.receiveShadow = false;
-  }
-
-  contactShadow(.55,.007,-1.63,1.32,1.16,.68);
-  contactShadow(-3.23,.814,2.29,.28,.29,.52);
-
-
-  // Furniture is loaded independently of the clickable screen.
-  const furniture = new GLTFLoader(loading).setMeshoptDecoder(MeshoptDecoder);
-  function placeModel(url, parent, x, y, z, height, rotation, onPlaced) {
-    furniture.load(url, ({ scene: model }) => {
-      model.rotation.y = rotation;
-      const bounds = new THREE.Box3().setFromObject(model);
-      const factor = height / (bounds.max.y - bounds.min.y);
-      const middle = bounds.getCenter(new THREE.Vector3());
-      model.scale.setScalar(factor);
-      model.position.set(x - middle.x * factor, y - bounds.min.y * factor, z - middle.z * factor);
-      model.traverse(node => {
-        if (node.isMesh) node.castShadow = node.receiveShadow = true;
-      });
-      parent.add(model);
-      if (onPlaced) onPlaced(model);
-      onUpdate(true);
-    });
-  }
-  placeModel('./media/study/potted_plant_04.glb',scene,-2.93,.56,-2.89,.30,.7);
-  placeModel('./media/study/lounge-chair.glb',scene,.55,.014,-1.63,.82,-.52);
-
-  const table = group(-.03, 0, -1.60);
-  cylinder(.24, .24, .032, 0, .419, 0, paleOak, table);
-  cylinder(.113, .131, .40, 0, .201, 0, chalk, table);
-  rounded(.24, .026, .15, .05, .462, .035, sage, table);
-
-  // Pleated paper glows from within at night. The lathed ribs stay in silhouette in daylight.
-  const pendant = group(-2.30,2.11,-1.88);
-  const profile = [];
-  for (let i=0;i<=160;i++) {
-    const t=i/160, rib=Math.pow(.5+.5*Math.cos(2*Math.PI*t*20),5);
-    const radius=.075+.31*Math.pow(Math.sin(Math.PI*t),.74)+.004*rib;
-    profile.push(new THREE.Vector2(radius,.48*(t-.5)));
-  }
-  const paperLantern = imageTexture(512,512,ctx=>{
-    const gradient=ctx.createLinearGradient(0,0,0,512);
-    gradient.addColorStop(0,'#997952');
-    gradient.addColorStop(.18,'#e0cdaa');
-    gradient.addColorStop(.48,'#fff6df');
-    gradient.addColorStop(.82,'#eddbb6');
-    gradient.addColorStop(1,'#ab916e');
-    ctx.fillStyle=gradient;
-    ctx.fillRect(0,0,512,512);
-    for (let i=0;i<=20;i++) {
-      const y=i*512/20;
-      ctx.fillStyle='rgba(88,61,34,.39)';
-      ctx.fillRect(0,y,512,2);
-      ctx.fillStyle='rgba(255,251,227,.56)';
-      ctx.fillRect(0,y+2,512,1);
-    }
-    for (let i=0;i<2800;i++) {
-      const x=(i*257.13)%512, y=(i*131.23)%512;
-      ctx.fillStyle='rgba(102,77,56,.09)';
-      ctx.fillRect(x,y,1+i%5,1);
-    }
-  });
-  const lampshade = new THREE.MeshPhysicalMaterial({
-    color: 0xfffaed, map:paperLantern, side: THREE.DoubleSide,
-    roughness: .96, sheen: .5, sheenColor: 0xffe4b7, emissive: 0xffcf91, emissiveMap:paperLantern
-  });
-  const paperLamp = add(new THREE.LatheGeometry(profile,80),lampshade,0,0,0,pendant);
-  paperLamp.castShadow = false;
-  cylinder(.070,.076,.017,0,.246,0,walnut,pendant);
-  cylinder(.005,.005,.79,0,.645,0,ink,pendant);
-  cylinder(.05,.05,.029,0,.941,0,cream,pendant);
-  const pendantLight = new THREE.PointLight(0xffc98e,0,6,2);
-  pendant.add(pendantLight);
-  const stemware = new THREE.MeshPhysicalMaterial({ color:0x8a9d84,roughness:.19,clearcoat:.78 });
-  const stemJar = [[0,0],[.065,0],[.073,.022],[.07,.11],[.035,.165],[.035,.18],[.027,.18],[.027,.16]];
-  add(new THREE.LatheGeometry(stemJar.map(([r,h])=>new THREE.Vector2(r,h)),40),stemware,-.11,.444,-.04,table);
-  for (let i=0;i<5;i++) {
-    const theta=i*2.40, x=-.11+.095*Math.cos(theta), z=-.04+.085*Math.sin(theta), height=.74+.034*(i%3);
-    rod([-.11,.59,-.04],[x,height,z],.0023,sage,table);
-    for (let j=0;j<5;j++) {
-      const petal=add(new THREE.SphereGeometry(.012,10,6),cream,x+.014*Math.cos(j*1.257),height,z+.014*Math.sin(j*1.257),table);
-      petal.scale.set(1,.36,1);
-    }
-    add(new THREE.SphereGeometry(.009,10,6),brass,x,height+.005,z,table);
-  }
-
-  // A low continuous sideboard leaves room for the reading chair and the artwork above it.
-  const library=group(.66,0,-3.48);
-  box(3.79,.42,.43,0,.38,.12,paleOak,library);
-  box(3.49,.16,.32,0,.09,.10,walnut,library);
-  for (let i=0;i<4;i++) {
-    const x=(i-1.5)*.94;
-    box(.929,.388,.021,x,.38,.352,i===3 ? canvasFabric : paleOak,library);
-  }
-  box(3.82,.035,.465,0,.604,.135,chalk,library);
-  const framed=group(-.68,1.61,.027,library);
-  box(1.01,1.23,.035,0,0,0,walnut,framed);
-  add(new THREE.PlaneGeometry(.989,1.209),printPaper,0,0,.019,framed);
-  const shelfTrim=new THREE.MeshStandardMaterial({color:0xb5a493,roughness:.64,emissive:0xffc48b});
-  for(const y of [1.28,1.80]) {
-    box(1.35,.031,.25,1.04,y,.11,paleOak,library);
-    box(1.16,.007,.009,1.04,y-.019,.16,shelfTrim,library);
-  }
-  const spines=[0xa09582,0x535e55,0xdfdbcc,0xa77157,0x746d5f];
-  for(let i=0;i<spines.length;i++) {
-    const h=.23+(i%3)*.035;
-    const cloth=canvasFabric.clone();cloth.color.setHex(spines[i]);
-    const volume=rounded(.045,h,.16,.55+i*.052,1.297+h/2,.16,cloth,library,.003);
-    for(const y of [.27,-.30]) box(.029,.003,.002,0,y*h,.081,cream,volume);
-  }
-  placeModel('./media/study/ceramic_vase_03.glb',library,1.34,1.817,.12,.37,-.3);
-  for(let i=0;i<2;i++) {
-    const volume=rounded(.34,.03,.18,.82,.639+i*.032,.16,i ? cream : sage,library,.003);
-    volume.rotation.y=.06-i*.08;
-  }
-  const bowlShape=[[0,0],[.084,0],[.092,.02],[.16,.074],[.158,.084],[.142,.08],[.077,.033],[0,.022]];
-  add(new THREE.LatheGeometry(bowlShape.map(([r,h])=>new THREE.Vector2(r,h)),64),
-    ceramic,-1.29,.623,.19,library);
-  placeModel('./media/study/potted_plant_01.glb',scene,-3.23,.814,2.29,.47,-.50);
-
-  // ==================== HERO ARCHITECT STUDIO DESK ====================
-  const desk = group(-2.65, 0, .88);
-  desk.rotation.y=Math.PI / 2;
-  contactShadow(0,.013,.10,2.85,1.4,.42,desk);
-  // Tabletop + subtle walnut apron frame underneath
-  rounded(2.02, .058, .94, 0, .775, 0, paleOak, desk, .018);
-  const topGeometry = new THREE.PlaneGeometry(1.997,.917);
-  topGeometry.setAttribute('uv1',topGeometry.attributes.uv.clone());
-  const grainUV=topGeometry.attributes.uv;
-  for(let i=0;i<grainUV.count;i++) grainUV.setXY(i,grainUV.getY(i)*.48,grainUV.getX(i));
-  const worktop = add(topGeometry,paleOak,0,.8044,0,desk);
-  worktop.name='worktop';
-  worktop.rotation.x=-Math.PI/2;
-  worktop.castShadow=false;
-  box(1.76, .046, .74, 0, .73, -.02, walnut, desk);
-
-  // Two joined oak trestles and a shallow tool drawer.
-  for(const x of [-.79,.78]) {
-    for(const z of [-.28,.28]) {
-      const leg=rounded(.054,.73,.077,x,.372,z,paleOak,desk,.009);
-      leg.rotation.x=z>0 ? -.10 : .10;
-    }
-    box(.052,.057,.62,x,.28,0,paleOak,desk);
-  }
-  box(1.56,.062,.045,-.005,.29,-.10,oak,desk);
-  rounded(.54,.082,.57,.48,.701,-.06,oak,desk,.009);
-  box(.13,.012,.022,.48,.70,.238,brass,desk);
-
-  // Stitched wool-felt desk mat (solid rounded base + crisp unseamed stitched top plane)
-  const deskMat = rounded(.852,.003,.373,-.06,.806,.205,sage,desk,.001);
-  deskMat.castShadow = false;
-  const felt = canvasFabric.clone();
-  felt.map = matTexture;
-  felt.color.setHex(0xffffff);
-  felt.sheen=.24;
-  const matTop = add(new THREE.PlaneGeometry(.845,.365),felt,-.06,.8077,.205,desk);
-  matTop.name='desk-felt';
-  matTop.rotation.x = -Math.PI / 2;
-
-  // Low-profile 65% board. The sculpted caps share one draw call, with a separate atlas for the legends.
-  const keyRows=[
-    ['Esc','1','2','3','4','5','6','7','8','9','0','−','=','Back|2','Del'],
-    ['Tab|1.5','Q','W','E','R','T','Y','U','I','O','P','[',']','\\|1.5','Pg↑'],
-    ['Caps|1.75','A','S','D','F','G','H','J','K','L',';',"'","Enter|2.25",'Pg↓'],
-    ['Shift|2.25','Z','X','C','V','B','N','M',',','.','/','Shift|1.75','↑','End'],
-    ['Ctrl|1.25','Alt|1.25','Cmd|1.25',' |6.25','Cmd','Fn','Ctrl','←','↓','→']
-  ];
-  const keyboard=group(-.102,.808,.209,desk);
-  const pitch=.01905;
-  const keys=[];
-  keyRows.forEach((row,r)=>{
-    let left=-8*pitch;
-    row.forEach(cell=>{
-      const [legend,units]=cell.split('|'), width=Number(units||1);
-      keys.push({legend,width,x:left+width*pitch/2,z:(r-2)*pitch,y:.019+(4-r)*.0012});
-      left+=width*pitch;
-    });
-  });
-  rounded(.327,.018,.112,0,.009,0,aluminum,keyboard,.006);
-  rounded(.312,.005,.099,0,.018,0,ink,keyboard,.005);
-  const ring=[],indices=[];
-  for(const [radius,y] of [[.0089,0],[.0089,.002],[.0074,.009],[.0071,.0096]]){
-    for(let corner=0;corner<4;corner++) for(let arc=0;arc<=4;arc++){
-      const theta=(corner+arc/4)*Math.PI/2;
-      const cx=corner===0||corner===3 ? radius-.002 : -radius+.002;
-      const cz=corner<2 ? radius-.002 : -radius+.002;
-      ring.push(cx+.002*Math.cos(theta),y,cz+.002*Math.sin(theta));
-    }
-  }
-  for(let r=0;r<3;r++) for(let i=0;i<20;i++){
-    const a=20*r+i,b=20*r+(i+1)%20;
-    indices.push(a,a+20,b,b,a+20,b+20);
-  }
-  for(let i=1;i<19;i++) indices.push(60,61+i,60+i);
-  const capGeo=new THREE.BufferGeometry();
-  capGeo.setAttribute('position',new THREE.Float32BufferAttribute(ring,3));capGeo.setIndex(indices);capGeo.computeVertexNormals();
-  const caps=new THREE.InstancedMesh(capGeo,material(0xffffff,.73),keys.length);
-  const transform=new THREE.Matrix4(), tint=new THREE.Color();
-  const labelPositions=[],labelUV=[],labelTriangles=[];
-  const letters=imageTexture(1024,512,ctx=>{
-    ctx.fillStyle='#3c403c';ctx.font='500 24px Helvetica, Arial, sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-    keys.forEach(({legend,width,x,z,y},i)=>{
-      transform.makeScale(width,1,1);transform.setPosition(x,y,z);
-      caps.setMatrixAt(i,transform);
-      caps.setColorAt(i,tint.setHex(legend==='Esc'||legend==='Enter' ? 0x98aaa0 : width>1 && legend!==' ' ? 0xd7d4c9 : 0xf0eee6));
-      const col=i%12,row=Math.floor(i/12),u=col/12,v=row/6;
-      ctx.fillText(legend,(u+1/24)*1024,(v+1/12)*512,75);
-      const xx=.0071*Math.min(width,1.8),zz=.0071,top=y+.00968;
-      labelPositions.push(x-xx,top,z-zz,x+xx,top,z-zz,x+xx,top,z+zz,x-xx,top,z+zz);
-      labelUV.push(u,1-v,u+1/12,1-v,u+1/12,1-v-1/6,u,1-v-1/6);
-      const n=i*4;labelTriangles.push(n,n+2,n+1,n,n+3,n+2);
-    });
-  });
-  caps.castShadow=caps.receiveShadow=true;keyboard.add(caps);
-  const legends=new THREE.BufferGeometry();
-  legends.setAttribute('position',new THREE.Float32BufferAttribute(labelPositions,3));
-  legends.setAttribute('uv',new THREE.Float32BufferAttribute(labelUV,2));
-  legends.setIndex(labelTriangles);legends.computeVertexNormals();
-  const lettering=add(legends,new THREE.MeshStandardMaterial({map:letters,transparent:true,depthWrite:false,roughness:.9}),0,0,0,keyboard);
-  lettering.castShadow=false;
-  const mouse=group(.192,.808,.222,desk);
-  // Cross sections follow the low nose, raised knuckle and full heel of a palm-grip mouse.
-  const mouseSpine=new THREE.CatmullRomCurve3([
-    [-.060,.001,.001],[-.056,.015,.011],[-.049,.025,.020],[-.030,.031,.028],[-.005,.033,.037],
-    [.019,.035,.040],[.040,.032,.034],[.054,.023,.021],[.059,.013,.012],[.062,.001,.001]
-  ].map(([z,w,h])=>new THREE.Vector3(z,w,h)));
-  const mouseSkin=[],mouseFaces=[];
-  for(let j=0;j<=40;j++){
-    const section=mouseSpine.getPoint(j/40);
-    for(let i=0;i<=32;i++){
-      const a=Math.PI*i/32, arch=Math.pow(Math.sin(a),.73);
-      mouseSkin.push(section.y*Math.cos(a)-.003*arch,.003+section.z*arch,section.x);
-    }
-  }
-  for(let j=0;j<40;j++) for(let i=0;i<32;i++){
-    const a=j*33+i;mouseFaces.push(a,a+1,a+33,a+1,a+34,a+33);
-  }
-  // Close the underside instead of exposing the hollow cross sections at the heel and nose.
-  for(let j=0;j<40;j++){
-    const a=j*33;
-    mouseFaces.push(a,a+33,a+32,a+33,a+65,a+32);
-  }
-  const shell=new THREE.BufferGeometry();
-  shell.setAttribute('position',new THREE.Float32BufferAttribute(mouseSkin,3));
-  shell.setIndex(mouseFaces);shell.computeVertexNormals();
-  const mouseFinish=material(0xdeddd5,.58);mouseFinish.side=THREE.DoubleSide;
-  add(shell,mouseFinish,0,0,0,mouse);
-  const foot=add(new THREE.SphereGeometry(1,40,12),ink,0,.003,0,mouse);
-  foot.scale.set(.031,.003,.055);
-  const buttonSeam=[];
-  for(let i=0;i<=13;i++){
-    const section=mouseSpine.getPoint(.018+i*.023);
-    buttonSeam.push([-.003,.00312+section.z,section.x]);
-  }
-  cable(buttonSeam,.00057,mouse);
-  rounded(.009,.002,.020,-.003,.036,-.019,ink,mouse,.0008);
-  const wheel=add(new THREE.CylinderGeometry(.0072,.0072,.0055,32),walnut,-.003,.037,-.019,mouse);
-  wheel.rotation.z=Math.PI/2;
-  for(let i=0;i<5;i++){
-    const ridge=add(new THREE.TorusGeometry(.00725,.00032,5,32),ink,-.0052+i*.0011,.037,-.019,mouse);
-    ridge.rotation.y=Math.PI/2;
-  }
-  for(const z of [-.003,.014]) rounded(.003,.004,.013,-.031,.020,z,ink,mouse,.001);
-  contactShadow(-.10,.808,.209,.40,.17,.58,desk);
-  contactShadow(.192,.808,.222,.092,.15,.50,desk);
-  contactShadow(.58,.807,.056,.19,.14,.66,desk);
-
-  // Oak riser with a compact workstation and front-panel I/O underneath.
-  rounded(.88,.022,.195,-.09,.889,-.197,paleOak,desk,.009);
-  const riserTop=new THREE.PlaneGeometry(.868,.184);
-  const riserUv=riserTop.attributes.uv;
-  for(let i=0;i<riserUv.count;i++)riserUv.setXY(i,riserUv.getY(i)*.12+.12,riserUv.getX(i)*.47+.24);
-  const veneer=add(riserTop,paleOak,-.09,.9003,-.197,desk);
-  veneer.rotation.x=-Math.PI/2;veneer.castShadow=false;
-  for(const x of [-.47,.29]) rounded(.027,.074,.162,x,.851,-.2,ink,desk,.006);
-  placeModel('./media/study/circuit_board.glb',desk,.193,.903,-.169,.030,-.13);
-  const computer=group(-.16,.806,-.157,desk);
-  rounded(.16,.056,.157,0,.029,0,aluminum,computer,.008);
-  rounded(.144,.006,.139,0,.003,0,ink,computer,.003);
-  for(const x of [-.047,-.022]) rounded(.014,.004,.002,x,.027,.079,ink,computer,.0014);
-  cylinder(.0015,.0015,.001, .052,.027,.0793,new THREE.MeshBasicMaterial({color:0x9ac19d}),computer).rotation.x=Math.PI/2;
-  const grille=new THREE.InstancedMesh(new THREE.BoxGeometry(.0017,.018,.001),ink,23);
-  for(let i=0;i<23;i++) grille.setMatrixAt(i,transform.makeTranslation(.0803,.028,-.047+i*.0042).multiply(new THREE.Matrix4().makeRotationY(Math.PI/2)));
-  computer.add(grille);
-  function cable(points,radius,parent) {
-    const path=new THREE.CatmullRomCurve3(points.map(([x,y,z])=>new THREE.Vector3(x,y,z)));
-    return add(new THREE.TubeGeometry(path,36,radius,8,false),ink,0,0,0,parent);
-  }
-  cable([[-.20,.839,.157],[-.23,.828,.125],[-.33,.816,.081],[-.35,.810,-.021],[-.26,.82,-.129]],.0028,desk);
-
-  // A leather notebook sits open on the daylight side, within reach of the chair.
-  placeModel('./media/study/binder_notebook.glb',desk,-.64,.806,.19,.022,.19);
-  // Artisan ceramic coffee mug + latte art + walnut coaster
-  const mug = group(.58, .806, .056, desk);
-  cylinder(.064, .064, .010, 0, .005, 0, walnut, mug);
-  const cupProfile=[[0,0],[.034,0],[.040,.005],[.044,.016],[.046,.079],
-    [.0458,.087],[.0448,.089],[.0428,.089],[.042,.087],[.041,.080],[.038,.018],[.032,.013],[0,.013]];
-  add(new THREE.LatheGeometry(cupProfile.map(([r,h])=>new THREE.Vector2(r,h)),72),ceramic,0,.011,0,mug);
-  const coffee=imageTexture(384,384,ctx=>{
-    const crema=ctx.createRadialGradient(156,170,11,192,192,187);
-    crema.addColorStop(0,'#483023');crema.addColorStop(.82,'#4d3021');
-    crema.addColorStop(.93,'#75482e');crema.addColorStop(.98,'#ad794d');crema.addColorStop(1,'#614332');
-    ctx.fillStyle=crema;ctx.fillRect(0,0,384,384);
-    for(let i=0;i<510;i++){
-      const a=i*2.39996,r=149+30*Math.sin(i*2.91);
-      ctx.fillStyle=i%3===0?'#d8ac7773':'#9a653745';
-      ctx.beginPath();ctx.arc(192+r*Math.cos(a),192+r*Math.sin(a),1+(i%4)*.48,0,2*Math.PI);ctx.fill();
-    }
-  });
-  const liquid=add(new THREE.CircleGeometry(.0418,72),new THREE.MeshPhysicalMaterial({
-    map:coffee,roughness:.17,clearcoat:.85,clearcoatRoughness:.14
-  }),0,.092,0,mug);
-  liquid.rotation.x=-Math.PI/2;liquid.castShadow=false;
-  const handlePath=new THREE.CatmullRomCurve3([[.042,.087,0],[.061,.082,0],[.069,.066,0],
-    [.066,.046,0],[.052,.034,0],[.042,.034,0]].map(([x,y,z])=>new THREE.Vector3(x,y,z)));
-  add(new THREE.TubeGeometry(handlePath,40,.0048,14,false),ceramic,0,0,0,mug);
-
-  // A shallow tilting shade, a satin stem and a weighted clay base.
-  const tableLamp=group(-.90,0,-.17,desk);
-  tableLamp.rotation.y=Math.PI;
-  const sand = new THREE.MeshPhysicalMaterial({color:0xe7d9c5,roughness:.57,clearcoat:.16,clearcoatRoughness:.45});
-  cylinder(.081,.089,.023,0,.817,0,sand,tableLamp);
-  cylinder(.010,.011,.396,0,1.021,0,brass,tableLamp);
-  add(new THREE.SphereGeometry(.018,24,16),brass,0,1.223,0,tableLamp);
-  const shadePivot=group(-.055,1.224,0,tableLamp);
-  shadePivot.rotation.z=-.23;
-  shadePivot.rotation.x=.26;
-  const shellProfile=[[.012,.069],[.047,.063],[.078,.046],[.105,.020],[.129,-.016],[.141,-.049],[.142,-.056],[.138,-.060]];
-  add(new THREE.LatheGeometry(shellProfile.slice().reverse().map(([r,h])=>new THREE.Vector2(r,h)),80),sand,0,0,0,shadePivot);
-  const reflector=new THREE.MeshStandardMaterial({color:0xf0e9d9,roughness:.7,emissive:0xffcb8c});
-  const diffuser=add(new THREE.CircleGeometry(.138,72),reflector,0,-.056,0,shadePivot);
-  diffuser.rotation.x=Math.PI/2;diffuser.castShadow=false;
-  const deskBeam=new THREE.SpotLight(0xffd8aa,0,3.8,Math.PI/3.15,.94,2);
-  deskBeam.position.set(-.014,-.065,.01);
-  shadePivot.add(deskBeam);
-  deskBeam.target.position.set(-.20,.94,-.13);
-  desk.add(deskBeam.target);
-  deskBeam.castShadow=true;
-  deskBeam.shadow.mapSize.set(768,768);
-  deskBeam.shadow.camera.near=.035;
-  deskBeam.shadow.normalBias=.002;
-  deskBeam.shadow.bias=-.0003;
-  const lampBounce=new THREE.PointLight(0xffcca0,0,1.8,2);
-  lampBounce.position.set(-.39,.94,-.10);
-  desk.add(lampBounce);
-  // ==================== PRO STUDIO MONITOR + ANIMATED CLICK AFFORDANCE ====================
-  const screenWidth = .84, screenHeight = .525;
-  const monitor = group(-.06, 1.245, -.19,desk);
-
-  // Precision anodized chassis
-  rounded(screenWidth + .017, screenHeight + .022, .033, 0, 0, -.005, ink, monitor, .018);
-  // Subtle status LED dot on bottom right bezel
-  const ledMat = new THREE.MeshBasicMaterial({ color: 0x4bc894 });
-  add(new THREE.CircleGeometry(.0055, 14), ledMat, screenWidth * .44, -screenHeight * .5 - .014, .017, monitor);
-
-  // Rear clamp and articulated VESA arm leave the area directly beneath the display open.
-  const arm=group(.22,0,-.409,desk);
-  rounded(.089,.020,.076,0,.81,0,ink,arm,.004);
-  cylinder(.021,.023,.25,0,.945,0,aluminum,arm);
-  rod([0,1.04,0],[-.138,1.16,-.019],.022,aluminum,arm);
-  rod([-.138,1.16,-.019],[-.279,1.217,.18],.019,aluminum,arm);
-  for(const [x,y,z] of [[0,1.04,0],[-.138,1.16,-.019],[-.279,1.217,.18]]) cylinder(.025,.025,.035,x,y,z,ink,arm);
-  rounded(.090,.078,.015,-.28,1.23,.19,ink,arm,.006);
-  cable([[-.08,1.195,-.216],[-.11,1.149,-.276],[.035,1.109,-.405],[.195,1.025,-.411],
-    [.21,.83,-.429],[.22,.745,-.458],[.145,.716,-.462]],.004,desk);
-  // Soft feathered Ambilight halo behind chassis (zero hard rectangular edge)
-  const haloTex = imageTexture(512, 320, ctx => {
-    ctx.clearRect(0, 0, 512, 320);
-    const cx = 256, cy = 160;
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.scale(1, 0.64);
-    const g = ctx.createRadialGradient(0, 0, 120, 0, 0, 250);
-    g.addColorStop(0, 'rgba(217, 119, 87, 0.85)');
-    g.addColorStop(0.55, 'rgba(217, 119, 87, 0.38)');
-    g.addColorStop(1, 'rgba(217, 119, 87, 0)');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(0, 0, 250, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  });
-  const glowMat = new THREE.MeshBasicMaterial({
-    map: haloTex,
-    transparent: true,
-    opacity: .12,
-    depthWrite: false
-  });
-  const monitorGlow = new THREE.Mesh(
-    new THREE.PlaneGeometry(screenWidth + .42, screenHeight + .34),
-    glowMat
-  );
-  monitorGlow.position.set(0, 0, -.032);
-  monitor.add(monitorGlow);
-
-  // Crisp luminous rim around screen glass
-  const monitorRimMat = new THREE.MeshBasicMaterial({
-    color: 0xf5f0e6,
-    transparent: true,
-    opacity: .16,
-    toneMapped: false
-  });
-  const monitorRim = new THREE.Mesh(
-    new THREE.PlaneGeometry(screenWidth + .018, screenHeight + .018),
-    monitorRimMat
-  );
-  monitorRim.position.set(0, .003, .0168);
-  monitor.add(monitorRim);
-
-  const placeholder = imageTexture(1320, 825, ctx => {
-    ctx.fillStyle = '#f5f3ec';
-    ctx.fillRect(0, 0, 1320, 825);
-    ctx.fillStyle = '#141413';
-    ctx.font = '600 88px Georgia, serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('EmbodiedStudio', 660, 390);
-    ctx.fillStyle = '#c96442';
-    ctx.fillRect(580, 435, 160, 6);
-  });
-  const glassDisplay = new THREE.MeshPhysicalMaterial({
-    map:placeholder, color:0x242424, emissive:0xffffff, emissiveMap:placeholder,
-    emissiveIntensity:.91, roughness:.53, specularIntensity:.30, clearcoat:.07, clearcoatRoughness:.35, toneMapped:false
-  });
-  const monitorSurface = add(new THREE.PlaneGeometry(screenWidth,screenHeight),glassDisplay,0,.003,.0185,monitor);
-  monitorSurface.castShadow=false;
-
-  let previewRequest = 0, currentPreview = '';
-  function setPreview(url) {
-    if (currentPreview === url) return;
-    currentPreview = url;
-    const request = ++previewRequest;
-    new THREE.TextureLoader(loading).load(url, map => {
-      if (request !== previewRequest) {
-        map.dispose();
-        return;
+  // The only photographed surface is the far garden seen through the actual glazing.
+  const viewMaterial=new THREE.MeshBasicMaterial({map:daySky,toneMapped:false});
+  const gardenPlane=new THREE.PlaneGeometry(3.0,3.2);
+  const gardenUV=gardenPlane.attributes.uv, gardenPoints=gardenPlane.attributes.position;
+  for(let i=0;i<gardenUV.count;i++) gardenUV.setXY(i,gardenPoints.getX(i)/1.83+.5,gardenPoints.getY(i)/1.25+.5);
+  const yard=add(gardenPlane,viewMaterial,-1.286,1.361,-2.05);
+  yard.castShadow=yard.receiveShadow=false;
+  const sideYard=add(new THREE.PlaneGeometry(3.0,3.4),viewMaterial,-3.40,1.59,1.62);
+  sideYard.rotation.y=Math.PI/2;
+  sideYard.castShadow=sideYard.receiveShadow=false;
+  const outdoorStems = [], outdoorLeaves = [];
+  const vec = (x,y,z) => new THREE.Vector3(x,y,z);
+  function branch(stems, leaves, root, tip, turn, branchCount, radius) {
+    const bend = root.clone().lerp(tip,.43).add(turn), path = [root,bend,tip];
+    stems.push({start:root,end:bend,radius},{start:bend,end:tip,radius:radius*.62});
+    for (let i=0; i<branchCount; i++) {
+      const f = .33 + i * .64 / branchCount;
+      const stem = f < .46 ? path[0].clone().lerp(path[1],f/.46) : path[1].clone().lerp(path[2],(f-.46)/.54);
+      const phase = i*2.39996 + tip.y*22;
+      const length = (.52-.37*f) * Math.max(.14,root.distanceTo(tip));
+      const delta = vec(Math.sin(phase)*length*.64,length*.45,Math.cos(phase)*length);
+      const end = stem.clone().add(delta);
+      stems.push({start:stem,end,radius:radius*.30});
+      for (let j=0; j<6; j++) {
+        const k = .16 + j*.16;
+        leaves.push(stem.clone().lerp(end,k).add(vec(Math.sin(phase+j*3)*length*.20,length*.09,Math.cos(phase+j*3)*length*.23)));
       }
-      map.colorSpace = THREE.SRGBColorSpace;
-      map.anisotropy = 8;
-      monitorSurface.material.map.dispose();
-      monitorSurface.material.map = monitorSurface.material.emissiveMap = map;
+    }
+  }
+  // Branch clusters outside the left window physically break the beam into dappled sunlight.
+  const outdoorRoot=vec(-2.73,-.15,1.51);
+  for(let i=0;i<19;i++) {
+    const tint=i*2.39996;
+    const root=outdoorRoot.clone().add(vec(0,.58+i*.12,i*.017));
+    const tip=vec(-2.70-.23*Math.sin(tint),1.19+i*.081,.53+i*.109+.31*Math.sin(tint));
+    branch(outdoorStems,outdoorLeaves,root,tip,vec(-.11,.031,.078*Math.sin(tint)),7,.018-.0005*i);
+  }
+  const canopy=[[1.03,.62,.27],[1.08,1.07,.26],[.87,1.53,.29],[1.02,1.94,.30],[1.43,.87,.32],
+    [1.49,1.38,.24],[1.41,1.82,.33],[1.59,2.29,.25],[1.88,1.06,.24],[1.97,1.53,.28],[2.05,1.93,.33],
+    [2.23,.64,.29],[2.33,1.23,.33],[2.46,1.71,.25],[2.53,2.20,.29],[2.78,1.33,.36],
+    [.68,.79,.23],[.69,1.91,.27],[.61,2.37,.28],
+    [2.67,.1,.27],[2.82,.36,.21],[2.68,.63,.22],[2.96,.61,.31],[2.72,.93,.24],
+    [3.02,.12,.26],[3.14,.38,.28],[3.26,.06,.20],[3.56,.31,.25],[3.21,.69,.25]];
+  for(const [index,[y,z,radius]] of canopy.entries()) for(let i=0;i<48;i++) {
+    const angle=(i+index*.15)*2.39996,r=radius*Math.sqrt((i+.5)/48);
+    const edge=.75+.27*Math.cos(angle*3+index);
+    outdoorLeaves.push(vec(-2.56+.084*Math.sin(angle+index),y+r*Math.sin(angle)*edge,z+r*Math.cos(angle)*edge));
+  }
+  scene.add(taperedSegments(outdoorStems,material(0x61523b,.90),7),plantLeaves(outdoorLeaves,1.95));
+  // The desk keeps the rounded upright by the writing area and the open trestle below the screen side.
+  const deskY=.742, deskZ=-1.115, slabHeight=.036, slabWidth=2.73, slabDepth=.69, lip=.006;
+  const slab=new THREE.ExtrudeGeometry(roundRect(slabWidth-2*lip,slabDepth-2*lip,.054),{
+    depth:slabHeight-2*lip,bevelSize:lip,bevelThickness:lip,bevelSegments:3,curveSegments:9
+  });
+  slab.rotateX(-Math.PI/2);
+  slab.translate(0,lip-slabHeight/2,0);
+  const slabUV=slab.attributes.uv, slabPosition=slab.attributes.position;
+  for(let i=0;i<slabUV.count;i++) slabUV.setXY(i,slabPosition.getY(i)*1.74+.47,slabPosition.getX(i)*.46+.50);
+  const edgeOak=oak.clone();
+  edgeOak.color.setHex(0xffeddb).multiplyScalar(1.55);
+  add(slab,edgeOak,0,deskY-slabHeight/2,deskZ);
+  const topGeometry=new THREE.ShapeGeometry(roundRect(slabWidth-2*lip,slabDepth-2*lip,.054),10);
+  const topPosition=topGeometry.attributes.position, grain=topGeometry.attributes.uv, bakeUV=[];
+  for(let i=0;i<grain.count;i++) {
+    const u=topPosition.getX(i)/(slabWidth-2*lip)+.5, v=topPosition.getY(i)/(slabDepth-2*lip)+.5;
+    grain.setXY(i,v*.94+.12,u*1.16+.10); bakeUV.push(u,v);
+  }
+  topGeometry.setAttribute('uv1',new THREE.Float32BufferAttribute(bakeUV,2));
+  const deskTop=add(topGeometry,oak,0,deskY+.00065,deskZ);
+  deskTop.rotation.x=-Math.PI/2;
+  deskTop.name='worktop';
+  deskTop.castShadow=false;
+  const tw=(slabWidth-2*lip)/2, td=(slabDepth-2*lip)/2;
+  deskTop.userData.bakeCorners=[[-tw,-td,0],[tw,-td,0],[-tw,td,0]];
+  const pedestal=loftGeometry(62,8,(u,v)=>{
+    const [y,rad]=[[.015,.855],[.025,.942],[.042,.99],[.065,1],[.32,1],[.56,1],[.673,1],[.695,.985],[.714,.945]][Math.round(v*8)];
+    const angle=u*2*Math.PI,c=Math.cos(angle),s=Math.sin(angle);
+    return [.165*rad*Math.sign(c)*Math.abs(c)**.53,y,.301*rad*Math.sign(s)*Math.abs(s)**.67];
+  });
+  const pedestalOak=oak.clone();
+  pedestalOak.color.multiplyScalar(1.32);
+  add(pedestal,pedestalOak,-1.177,0,deskZ-.011);
+  const plinth=cylinder(.153,.15,.022,-1.177,.012,deskZ,frameWood,scene,44);
+  plinth.scale.z=1.82;
+
+  function beam(start,end,width,depth,finish,parent,radius=.004) {
+    const kick=end.clone().sub(start);
+    const center=start.clone().lerp(end,.5);
+    const geometry=softenedBox(width,kick.length(),depth,radius);
+    const uv=geometry.attributes.uv,p=geometry.attributes.position;
+    for(let i=0;i<uv.count;i++) uv.setXY(i,(p.getX(i)+p.getZ(i))*.90+.46,p.getY(i)*1.45+.54);
+    const wood=add(geometry,finish,center.x,center.y,center.z,parent);
+    wood.quaternion.setFromUnitVectors(vec(0,1,0),kick.normalize());
+    return wood;
+  }
+  const trestle=group(1.128,0,deskZ-.018);
+  for(const side of [-1,1]) {
+    beam(vec(.062,.006,side*.292),vec(-.06,.704,side*.141),.055,.057,oak,trestle,.007);
+    rounded(.084,.025,.071,.003,-.058,.689,side*.141,frameWood,trestle);
+    const peg=cylinder(.008,.008,.002,-.029,.676,side*.153,frameWood,trestle,14);
+    peg.rotation.z=Math.PI/2;
+  }
+  beam(vec(.045,.253,-.233),vec(.045,.253,.233),.038,.048,oak,trestle);
+  rounded(.188,.037,.433,.004,-.034,.699,0,oak,trestle);
+  rounded(2.26,.043,.044,.004,-.015,.688,-1.362,frameWood);
+
+  // Thin woven rug, supported by the actual floor. The weave has its own UV scale and a rounded edge.
+  const rugFinish=new THREE.MeshPhysicalMaterial({
+    color:0xffeed9,roughness:.96,sheen:.58,sheenColor:0xa69073,sheenRoughness:.92,
+    map:surfaceMap('./media/study/study-jute-albedo.webp'),
+    normalMap:surfaceMap('./media/study/study-jute-normal.webp',false),
+    normalScale:new THREE.Vector2(.93,.93)
+  });
+  const rug=planarFace('rug',2.93,2.19,.08,.0072,.047,-Math.PI/2,0,rugFinish,(u,v)=>[u*19.5,v*14.6]);
+  rug.castShadow=false;
+  const rugEdge=rounded(2.94,.0065,2.20,.0018,.08,.0034,.047,material(0xa28b69,.94));
+  rugEdge.castShadow=false;
+
+  const ceramic = new THREE.MeshPhysicalMaterial({
+    color:0xd1b99a,roughness:.47,clearcoat:.17,clearcoatRoughness:.42,
+    map:stoneMap
+  });
+  const vase=group(.054,deskY,-1.158);
+  vaseShape([[0,0],[.044,0],[.052,.01],[.061,.035],[.061,.092],[.054,.116],[.031,.137],
+    [.032,.159],[.035,.168],[.031,.171],[.025,.167],[.024,.147],[.026,.127],[.044,.109],[.047,.034],[0,.009]],ceramic,0,0,0,vase);
+  const stems=[], leaves=[], root=vec(0,.138,0);
+  for(const [i,tip] of [vec(-.227,.335,.03),vec(-.176,.287,.02),vec(-.092,.371,-.01),vec(.078,.414,-.01),
+    vec(.197,.349,.017),vec(.182,.282,.027),vec(.097,.270,.047)].entries()) {
+    branch(stems,leaves,root,tip,vec(i<3?-.016:.022,.026,.019),5,i%3===0?.0035:.0021);
+  }
+  vase.add(taperedSegments(stems,material(0x62553a,.82),7),plantLeaves(leaves,.64));
+
+  // Satin brass base, curved stem and rolled reflector. The warm source comes from inside the shade.
+  const lamp=group(-.633,deskY,-1.309);
+  const brass=new THREE.MeshPhysicalMaterial({color:0xc9a477,roughness:.37,metalness:.60,clearcoat:.18,clearcoatRoughness:.49});
+  const brassRim=new THREE.MeshPhysicalMaterial({color:0xd8ad75,roughness:.30,metalness:.59});
+  cylinder(.065,.076,.020,0,.010,0,brass,lamp,48);
+  cylinder(.048,.061,.014,0,.024,0,brassRim,lamp,44);
+  const neck=new THREE.CatmullRomCurve3([vec(0,.026,0),vec(.001,.105,0),vec(.013,.201,-.007),
+    vec(.052,.258,-.004),vec(.118,.287,.008),vec(.202,.310,.023)]);
+  add(new THREE.TubeGeometry(neck,34,.007,10,false),brassRim,0,0,0,lamp);
+  const shadeHead=group(.213,.291,.024,lamp);
+  shadeHead.rotation.z=-.19;
+  const dome=vaseShape([[.077,0],[.077,.006],[.071,.027],[.056,.057],[.036,.077],[.015,.082],[.005,.084],[0,.084],
+    [.008,.080],[.021,.076],[.040,.063],[.060,.039],[.071,.013],[.072,.004],[.072,0]],brass,0,0,0,shadeHead,52);
+  dome.material.side=THREE.DoubleSide;
+  cylinder(.076,.076,.003,0,.002,0,brassRim,shadeHead,52);
+  const diffuser=new THREE.MeshStandardMaterial({color:0xeac8a0,roughness:.63,emissive:0xffd19d});
+  const bulb=add(new THREE.SphereGeometry(.014,20,13),diffuser,0,.008,0,shadeHead);
+  bulb.castShadow=false;
+  bulb.userData.skipBake=true;
+  const deskBeam=new THREE.SpotLight(0xffd2a4,0,2.82,Math.PI/3.25,.90,2);
+  deskBeam.position.set(0,-.007,0);
+  deskBeam.target.position.set(.042,-.285,.070);
+  deskBeam.castShadow=true;
+  deskBeam.shadow.mapSize.set(512,512);
+  deskBeam.shadow.camera.near=.028;
+  deskBeam.shadow.normalBias=.0018;
+  deskBeam.shadow.radius=3.25;
+  shadeHead.add(deskBeam,deskBeam.target);
+  const deskGlow=new THREE.PointLight(0xffd1a1,0,2.2,2);
+  deskGlow.name='deskLampBounce';
+  deskGlow.position.set(.193,.223,.061);
+  lamp.add(deskGlow);
+
+  const paper=material(0xe4d9be,.89), leather=material(0xa0815d,.73);
+  const notebook=group(-.661,deskY,-.921);
+  notebook.rotation.y=.048;
+  const print=imageTexture(448,300,ctx=>{
+    ctx.fillStyle='#efe6d0'; ctx.fillRect(0,0,448,300);
+    ctx.fillStyle='#c5ae83'; ctx.fillRect(221,0,6,300);
+    for(let column=0;column<2;column++) for(let row=0;row<18;row++) {
+      const offset=column*224+25,y=39+row*10;
+      for(let i=0;i<8;i++) {
+        ctx.fillStyle=i%3?'rgba(85,66,47,.26)':'rgba(85,66,47,.36)';
+        ctx.fillRect(offset+i*20,y,8+(row*9+i*5)%10,1.2);
+      }
+    }
+  });
+  const printed=material(0xfff4d8,.91);
+  printed.map=print;
+  printed.side=THREE.DoubleSide;
+  for(const side of [-1,1]) {
+    rounded(.189,.008,.246,.002,side*.095,.004,0,leather,notebook);
+    rounded(.182,.009,.238,.002,side*.092,.011,0,paper,notebook);
+    const spread=loftGeometry(15,6,(u,v)=>{
+      const signed=side===1?u:1-u;
+      return [side*signed*.184,.012+.021*Math.sin(signed*Math.PI)*Math.exp(-signed*.9)+.008*(1-signed),
+        (v-.5)*.235];
+    });
+    const uv=spread.attributes.uv;
+    for(let i=0;i<uv.count;i++) uv.setXY(i,.5+side*.5*(side===1?uv.getX(i):1-uv.getX(i)),uv.getY(i));
+    add(spread,printed,0,.003,0,notebook);
+  }
+  const pencil=cylinder(.003,.003,.141,-.329,deskY+.004,-.914,frameWood,scene,12);
+  pencil.rotation.set(Math.PI/2,.22,.32);
+
+  const cup=group(-.169,deskY,-.972);
+  vaseShape([[0,0],[.032,0],[.041,.007],[.046,.036],[.047,.071],[.045,.074],
+    [.041,.074],[.040,.069],[.039,.026],[.033,.013],[0,.013]],ceramic,0,0,0,cup,48);
+  add(new THREE.TorusGeometry(.020,.004,8,24),ceramic,.049,.043,0,cup);
+  const coffee=material(0x462819,.31);
+  cylinder(.039,.039,.001,0,.058,0,coffee,cup,40);
+  const host=group(.293,deskY,-1.135);
+  rounded(.194,.055,.147,.011,0,.027,0,new THREE.MeshPhysicalMaterial({color:0xa7a49c,roughness:.35,metalness:.64}),host);
+  rounded(.181,.006,.139,.003,0,.003,0,matteBlack,host);
+  for(const x of [-.065,-.044,.011,.041,.066]) rounded(.012,.004,.002,.0005,x,.023,.074,matteBlack,host);
+  const mouse=rounded(.083,.027,.108,.014,1.011,deskY+.013,-.899,anodized);
+  mouse.rotation.y=-.12;
+  const pencilCup=group(1.239,deskY,-1.142);
+  vaseShape([[0,0],[.045,0],[.047,.009],[.048,.090],[.045,.096],[.040,.093],
+    [.040,.013],[0,.012]],ceramic,0,0,0,pencilCup,44);
+  for(let i=0;i<5;i++) {
+    const pen=cylinder(.0026,.0026,.139,Math.cos(i*2.4)*.021,.083+Math.sin(i*1.7)*.008,
+      Math.sin(i*2.4)*.021,matteBlack,pencilCup,10);
+    pen.rotation.set(.19*Math.sin(i),0,.27*Math.cos(i));
+  }
+  // Compact keyboard with individually beveled keycaps packed into one instanced draw.
+  const keyboard = group(.784,deskY,-.893);
+  const keyFinish = material(0xffffff,.79);
+  rounded(.437,.013,.144,.003,0,.007,0,anodized,keyboard);
+  const keyLayout = ['ESC1234567890-=', ' QWERTYUIOP[]', ' ASDFGHJKL;', ' ZXCVBNM,.', '    ______    '];
+  const keys=[];
+  for (const [row, letters] of keyLayout.entries()) for (const [col, char] of [...letters].entries()) {
+    if (char !== ' ' && (char !== '_' || col === 4)) keys.push({char,row,col});
+  }
+  const caps = new THREE.InstancedMesh(softenedBox(.021,.004,.018,.001),keyFinish,keys.length);
+  const pivot = new THREE.Object3D(), tint = new THREE.Color();
+  const legends = imageTexture(768,256,ctx=>{
+    ctx.font='500 17px sans-serif';
+    ctx.fillStyle='#c1bdb2';
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    for (const [index, {char,row,col}] of keys.entries()) {
+      pivot.position.set(-.191+col*.027+(char==='_'?.065:0),.016,-.050+row*.025);
+      pivot.scale.set(char==='_'?6:1,1,1);
+      pivot.updateMatrix();
+      caps.setMatrixAt(index,pivot.matrix);
+      caps.setColorAt(index,tint.setHex(char==='E'||char==='_' ? 0x484942 : 0x282c2b));
+      if (char !== '_') ctx.fillText(char,(col+.5)*51,(row+.5)*51);
+    }
+  });
+  caps.castShadow=caps.receiveShadow=true;
+  keyboard.add(caps);
+  const label = add(new THREE.PlaneGeometry(.405,.125),new THREE.MeshBasicMaterial({
+    map:legends,transparent:true,depthWrite:false,opacity:.72
+  }),.0005,.0182,0,keyboard);
+  label.rotation.x=-Math.PI/2;
+  label.castShadow=label.receiveShadow=false;
+
+  // The monitor is a separate clickable surface, with a physical frame, neck and metal stand.
+  const screenWidth=.661, screenHeight=.372;
+  const monitor = group(.784,1.049,-1.232);
+  const stand = group(.784,deskY,-1.244);
+  rounded(.251,.013,.172,.004,0,.007,0,anodized,stand);
+  rounded(.066,.163,.036,.006,0,.090,-.037,anodized,stand);
+  rounded(.135,.064,.022,.004,0,.157,-.034,matteBlack,stand);
+  rounded(screenWidth+.013,screenHeight+.014,.029,.005,0,0,-.009,matteBlack,monitor);
+  const placeholder=imageTexture(480,270,ctx=>{
+    ctx.fillStyle='#e9e1d2';
+    ctx.fillRect(0,0,480,270);
+  });
+  const display=new THREE.MeshPhysicalMaterial({
+    color:0x22201e, map:placeholder, emissive:0xfff5e5, emissiveMap:placeholder,
+    emissiveIntensity:.88, roughness:.53, specularIntensity:.28, clearcoat:.075, toneMapped:false
+  });
+  const monitorSurface=add(new THREE.PlaneGeometry(screenWidth,screenHeight),display,0,0,.006,monitor);
+  monitorSurface.castShadow=false;
+  const rim=new THREE.MeshBasicMaterial({color:0xeadfc8, transparent:true,opacity:.12,toneMapped:false});
+  const hoverLight=add(new THREE.PlaneGeometry(screenWidth+.004,screenHeight+.004),rim,0,0,.005,monitor);
+  hoverLight.castShadow=hoverLight.receiveShadow=false;
+
+  const panelTextures = new Map();
+  let monitorRequest=0, currentPreview='';
+  function setPreview(url) {
+    if (currentPreview===url) return;
+    currentPreview=url;
+    const request=++monitorRequest;
+    function update(texture) {
+      if (request!==monitorRequest) return;
+      display.map=display.emissiveMap=texture;
       onUpdate();
-    }, undefined, () => {});
+    }
+    if (panelTextures.has(url)) { update(panelTextures.get(url)); return; }
+    (request===1 ? loader : previewLoader).load(url,texture=>{
+      texture.colorSpace=THREE.SRGBColorSpace;
+      texture.anisotropy=8;
+      panelTextures.set(url,texture);
+      update(texture);
+    },undefined,()=>{ if (request===monitorRequest) currentPreview=''; });
   }
   setPreview(previewUrl);
 
-  // A light ash writing chair with a continuous curved plywood back and a linen seat.
-  const writingChair=group(-.59,0,.55,desk);
-  writingChair.rotation.y=-.94;
-  const seat=add(new THREE.SphereGeometry(1,56,24),paleOak,0,.438,0,writingChair);
-  seat.scale.set(.245,.023,.222);
-  const upholstery=add(new THREE.SphereGeometry(1,56,24),mossLinen,0,.461,-.005,writingChair);
-  upholstery.scale.set(.234,.028,.210);
-  for(const x of [-.157,.157]) for(const z of [-.125,.125]) {
-    rod([x,.432,z],[x*1.22,.014,z*1.34],.015,paleOak,writingChair);
+  // The chair faces the writing area at a shallow angle. Its dark contacts stay on the actual rug or floor.
+  const chair=group(-.286,0,-.948);
+  chair.scale.set(1.045,1,.958);
+  chair.rotation.y=-.43;
+  for(const side of [-1,1]) {
+    beam(vec(side*.224,.007,.188),vec(side*.206,.464,.173),.030,.032,oak,chair,.006);
+    beam(vec(side*.230,.007,-.211),vec(side*.203,.581,-.171),.030,.032,oak,chair,.005);
+    beam(vec(side*.196,.398,-.173),vec(side*.191,.405,.172),.025,.041,oak,chair,.004);
+    beam(vec(side*.204,.417,.165),vec(side*.181,.682,.208),.026,.026,oak,chair,.005);
   }
-  for(const x of [-.162,.162]) rod([x,.42,.145],[x,.69,.205],.012,paleOak,writingChair);
-  const shellVertices=[], shellUV=[], shellTriangles=[];
-  const cols=40, rows=12, sideSize=(cols+1)*(rows+1);
-  for(let side=0;side<2;side++) for(let j=0;j<=rows;j++) for(let i=0;i<=cols;i++) {
-    const v=j/rows, u=i/cols;
-    const corner=Math.max(0,.046-Math.min(v,1-v)*.207);
-    const half=.197+Math.sqrt(.046*.046-corner*corner);
-    const theta=(u-.5)*1.52, r=half/Math.sin(.76)+side*.011;
-    shellVertices.push(Math.sin(theta)*r,.581+.207*v,.224+(Math.cos(theta)-1)*r+.032*v+side*.011);
-    shellUV.push(u,v*.50);
+  beam(vec(-.186,.382,-.168),vec(.186,.382,-.168),.032,.043,oak,chair);
+  beam(vec(-.189,.381,.169),vec(.189,.381,.169),.030,.040,oak,chair);
+  for(const side of [-1,1]) {
+    const arm=loftGeometry(26,10,(u,v)=>{
+      const angle=-v*2*Math.PI;
+      const end=Math.max(.48,Math.min(1,u*19,(1-u)*19));
+      return [side*(.218+.019*Math.sin(u*Math.PI))+.018*Math.cos(angle)*end,
+        .589+.047*Math.sin(u*Math.PI/2)+.009*Math.sin(angle)*end,-.200+u*.405];
+    });
+    const armUV=arm.attributes.uv;
+    for(let i=0;i<armUV.count;i++) armUV.setXY(i,armUV.getY(i)*.20,armUV.getX(i)*.64);
+    const armFinish=oak.clone(); armFinish.side=THREE.DoubleSide;
+    add(arm,armFinish,0,0,0,chair);
   }
-  const quad=(a,b,c,d)=>shellTriangles.push(a,b,d,b,c,d);
-  for(let j=0;j<rows;j++) for(let i=0;i<cols;i++) {
-    const a=j*(cols+1)+i,b=a+1,d=a+cols+1,c=d+1;
-    quad(a,d,c,b);quad(a+sideSize,b+sideSize,c+sideSize,d+sideSize);
-  }
-  for(let i=0;i<cols;i++) {
-    const a=rows*(cols+1)+i;
-    quad(i,i+1,i+1+sideSize,i+sideSize);
-    quad(a,a+sideSize,a+sideSize+1,a+1);
-  }
-  for(let j=0;j<rows;j++) {
-    const a=j*(cols+1),b=a+cols+1;
-    quad(a,a+sideSize,b+sideSize,b);
-    quad(a+cols,b+cols,b+cols+sideSize,a+cols+sideSize);
-  }
-  const chairBack=new THREE.BufferGeometry();
-  chairBack.setAttribute('position',new THREE.Float32BufferAttribute(shellVertices,3));
-  chairBack.setAttribute('uv',new THREE.Float32BufferAttribute(shellUV,2));
-  chairBack.setIndex(shellTriangles);
-  chairBack.computeVertexNormals();
-  add(chairBack,paleOak,0,0,0,writingChair);
+  const cushion=loftGeometry(52,10,(u,v)=>{
+    const layers=[[.393,.65],[.398,.88],[.407,.96],[.418,1],[.436,1],[.451,.976],[.463,.92],[.472,.79],[.478,.52],[.480,.26],[.481,.001]];
+    const [y,radius]=layers[Math.round(v*10)], a=u*2*Math.PI,c=Math.cos(a),s=Math.sin(a);
+    return [radius*.206*Math.sign(c)*Math.abs(c)**.58,y,radius*.205*Math.sign(s)*Math.abs(s)**.65-.028];
+  });
+  const seatUV=cushion.attributes.uv, seatVertices=cushion.attributes.position;
+  for(let i=0;i<seatUV.count;i++) seatUV.setXY(i,.5+seatVertices.getX(i)*2.8,.5+seatVertices.getZ(i)*2.8);
+  add(cushion,linen,0,0,0,chair);
+  const backCushion=loftGeometry(48,14,(u,v)=>{
+    const angle=u*2*Math.PI;
+    const dims=[[0,.7],[.01,.90],[.024,.96],[.042,.995],[.063,1],[.090,1],[.118,1],[.149,1],
+      [.172,.994],[.194,.97],[.211,.936],[.225,.893],[.236,.80],[.242,.59],[.245,.001]];
+    const [h,radius]=dims[Math.round(v*14)];
+    return [Math.cos(angle)*.202*radius,.487+h+.003*Math.cos(angle)*Math.cos(angle),
+      .188+.069*h/.245+Math.sin(angle)*.026*radius-.036*Math.cos(angle)**2];
+  });
+  const textile=linen.clone(); textile.side=THREE.DoubleSide;
+  const backUV=backCushion.attributes.uv, backVertices=backCushion.attributes.position;
+  for(let i=0;i<backUV.count;i++) backUV.setXY(i,.5+backVertices.getX(i)*2.65,backVertices.getY(i)*2.68);
+  add(backCushion,textile,0,0,0,chair);
+  const seam=new THREE.CatmullRomCurve3(Array.from({length:40},(_,i)=>{
+    const a=i*Math.PI/20,c=Math.cos(a),s=Math.sin(a);
+    return vec(.202*Math.sign(c)*Math.abs(c)**.56,.609+.108*Math.sign(s)*Math.abs(s)**.51,
+      .243+.035*s-.031*c*c);
+  }),true);
+  add(new THREE.TubeGeometry(seam,66,.00145,6,true),linen,0,0,0,chair);
 
-  // Lighting rig
-  const sunlight = new THREE.DirectionalLight(0xfff1da, 2.55);
-  sunlight.position.set(-5.8, 3.0, 1.75);
-  sunlight.target.position.set(.71, .3, -1.84);
-  sunlight.castShadow = true;
-  sunlight.shadow.mapSize.set(2048, 2048);
-  sunlight.shadow.normalBias = .004;
-  sunlight.shadow.bias = -.00015;
-  sunlight.shadow.radius = 4;
-  Object.assign(sunlight.shadow.camera, { left: -4.2, right: 4.2, top: 4, bottom: -4, near: .1, far: 18 });
+  // A shallow solid-oak shelf with a framed landscape, clothbound books, and a trailing plant.
+  const shelving=group(.997,1.518,-1.447);
+  const shelf=rounded(1.375,.037,.205,.006,0,0,0,oak,shelving);
+  shelf.name='wall-shelf';
+  for(const x of [-.47,.47]) rounded(.020,.025,.111,.002,x,-.013,-.061,frameWood,shelving);
+  const frame=group(-.305,.188,-.016,shelving);
+  const woodFrame=rounded(.389,.348,.026,.003,0,0,0,frameWood,frame);
+  woodFrame.rotation.x=-.015;
+  const mat=rounded(.353,.312,.003,.0006,0,0,.014,material(0xe3d4bb,.91),frame);
+  mat.castShadow=false;
+  const printFinish=material(0xe2d2b7,.93);
+  const printMap=surfaceMap('./media/study/study-mountain-art.webp');
+  printMap.wrapS=printMap.wrapT=THREE.ClampToEdgeWrapping;
+  printFinish.map=printMap;
+  const picture=add(new THREE.PlaneGeometry(.245,.199),printFinish,0,.015,.017,frame);
+  picture.castShadow=false;
+  const books=[['#a99372',.229,.048],['#7f745f',.251,.038],['#ada08b',.255,.036],
+    ['#c7b797',.259,.046],['#d4c3a3',.276,.051],['#7f7561',.264,.035],['#5b5548',.279,.049]];
+  let bookX=.080;
+  for(const [i,[color,height,width]] of books.entries()) {
+    const book=group(bookX+width/2,.018,-.028,shelving);
+    book.rotation.z=i===0?-.15:(i===1?-.06:0);
+    const cover=material(color,.89);
+    rounded(width,height,.102,.0028,0,height/2,0,cover,book);
+    rounded(width*.73,height-.009,.094,.002,0,height/2,-.007,paper,book);
+    rounded(width,.006,.103,.0015,0,height-.004,0,cover,book);
+    for(let row=0;row<7;row++) box(.0036+(row%3)*.001,.0022,.001,0,height-.043-row*.007,.052,frameWood,book);
+    bookX+=width+.006;
+  }
+  const shrub=group(.548,.019,.016,shelving);
+  vaseShape([[0,0],[.038,0],[.045,.011],[.051,.063],[.051,.099],[.046,.102],[.042,.099],
+    [.041,.085],[.038,.019],[0,.014]],ceramic,0,0,0,shrub,40);
+  const vines=[], vineLeaves=[];
+  for(let k=0;k<5;k++) {
+    const points=[vec(0,.092,0),vec(.016*k-.05,.155+.018*Math.cos(k),.035),
+      vec(.072+.016*k,.085-.018*k,.079),vec(.06+.041*Math.sin(k),-.065*k,.102+.009*k),
+      vec(.048+.093*Math.sin(k+1),-.19-.047*k,.120+.018*k)];
+    const stem=new THREE.CatmullRomCurve3(points);
+    add(new THREE.TubeGeometry(stem,26,.0013,7,false),material(0x626238,.84),0,0,0,shrub);
+    for(let i=0;i<12;i++) {
+      const at=stem.getPoint((i+.48)/13);
+      const leaf=at.clone().add(vec(.017*Math.sin(i*2.2+k),.008*Math.cos(i*2.1),.008+.017*Math.sin(i*2.13)));
+      vines.push({start:at,end:leaf,radius:.00062});
+      vineLeaves.push(leaf);
+    }
+  }
+  shrub.add(taperedSegments(vines,material(0x5d562f,.84),6),plantLeaves(vineLeaves,1.31,true));
+  const sun = new THREE.DirectionalLight(0xffe7c6,2.9);
+  sun.name='windowSun';
+  sun.position.set(-4.52,3.75,2.18);
+  sun.target.position.set(.22,.52,-1.25);
+  sun.castShadow=true;
+  sun.shadow.mapSize.set(1792,1792);
+  sun.shadow.normalBias=.003;
+  sun.shadow.bias=-.00011;
+  sun.shadow.radius=3.4;
+  Object.assign(sun.shadow.camera,{left:-2.9,right:2.9,top:2.95,bottom:-2.95,near:.25,far:14});
+  const fill = new THREE.HemisphereLight(0xfcf7ef,0xd4b794,1.08);
+  const windowBounce = new THREE.DirectionalLight(0xeef4ff,.31);
+  windowBounce.position.set(-2.84,1.88,-2.73);
+  windowBounce.target.position.set(.40,.75,-.48);
+  const frontBounce = new THREE.DirectionalLight(0xffecd8,.37);
+  frontBounce.position.set(.25,2.01,1.90);
+  const writingBounce=new THREE.SpotLight(0xffeed9,0,2.9,Math.PI/2.7,.96,2);
+  writingBounce.position.set(-1.71,1.19,-.49);
+  writingBounce.target.position.set(-1.03,.44,-1.02);
+  scene.add(sun,sun.target,fill,windowBounce,windowBounce.target,frontBounce,writingBounce,writingBounce.target);
 
-  const ambient = new THREE.HemisphereLight(0xf8f4e9, 0xb3a895, 1.62);
-  const bounce = new THREE.DirectionalLight(0xe3ebed, .62);
-  bounce.position.set(1.6, 2.82, 3.9);
-  const screenGlow = new THREE.PointLight(0xf8efe2, 0, 2.6, 2);
-  screenGlow.position.set(-.06,1.245,.06);
-  desk.add(screenGlow);
-  scene.add(sunlight,sunlight.target,ambient,bounce);
-
-  const shelfWash = new THREE.SpotLight(0xffcf9a,0,4,1.0,.95,2);
-  shelfWash.position.set(1.72,2.15,-2.91);
-  shelfWash.target.position.set(1.68,1.22,-3.45);
-  scene.add(shelfWash,shelfWash.target);
-
-  let nightMode = false;
+  scene.userData.bakeReceivers={
+    floor:[0,1,0,352,416,1.18], 'back-wall':[0,0,1,384,270,1.08],
+    'right-wall':[-1,0,0,352,245,1.15], 'left-wall':[1,0,0,304,128,1.05], ceiling:[0,-1,0,256,244,1.43], worktop:[0,1,0,448,130,.42], rug:[0,1,0,348,248,.76]
+  };
+  if (lighting) {
+    for (const [surface, url] of [[floor,'./media/study/ao-floor.webp'],[backWall,'./media/study/ao-back-wall.webp'],
+      [rightWall,'./media/study/ao-right-wall.webp'],[leftWall,'./media/study/ao-left-wall.webp'],[ceiling,'./media/study/ao-ceiling.webp'],[deskTop,'./media/study/ao-worktop.webp'],[rug,'./media/study/ao-rug.webp']]) {
+      surface.material=surface.material.clone();
+      const ao=surfaceMap(url,false);
+      ao.channel=1;
+      surface.material.aoMap=ao;
+      surface.material.aoMapIntensity=.92;
+      surface.material.onBeforeCompile=useBakedLighting;
+    }
+  }
 
   function setHover(active) {
-    glowMat.opacity = active ? .16 : .10;
-    monitorRimMat.opacity = active ? .36 : .16;
+    rim.opacity=active ? .38 : .12;
     onUpdate();
   }
-
   function setNight(enabled) {
-    nightMode = Boolean(enabled);
-    scene.background.copy(nightMode ? nightBg : dayBg);
-    sunlight.intensity = nightMode ? .24 : 3.65;
-    sunlight.color.setHex(nightMode ? 0xa4c7ff : 0xffecd0);
-    ambient.intensity = nightMode ? .33 : 1.26;
-    ambient.color.setHex(nightMode ? 0x91a6c0 : 0xebf5ff);
-    ambient.groundColor.setHex(nightMode ? 0x635448 : 0xe4c7a7);
-    bounce.intensity = nightMode ? .12 : .62;
-    bounce.color.setHex(nightMode ? 0x92aff9 : 0xffeedb);
-    deskBeam.intensity = nightMode ? 3.5 : 0;
-    lampBounce.intensity = nightMode ? .115 : 0;
-    reflector.emissiveIntensity=nightMode ? 1.9 : .02;
-    pendantLight.intensity = nightMode ? 5.4 : 0;
-    lampshade.emissiveIntensity = nightMode ? 1.15 : .035;
-    shelfWash.intensity = nightMode ? 1.4 : 0;
-    shelfTrim.emissiveIntensity = nightMode ? .76 : 0;
-    screenGlow.intensity = nightMode ? .14 : 0;
-    glassDisplay.emissiveIntensity = nightMode ? .78 : .95;
-    scene.environment = nightMode ? nightReflection : dayReflection;
-    scene.environmentIntensity = nightMode ? .66 : .82;
-    reflectedGlass.opacity = nightMode ? .17 : .045;
-    const skyMap = nightMode ? nightSky : daySky;
-    for (const glass of windowPanes) {
-      glass.material.map = skyMap;
-      glass.material.needsUpdate = true;
-    }
+    const night=Boolean(enabled);
+    scene.background.setHex(night ? 0x191b24 : 0xb7a286);
+    scene.environment=night ? nightReflection : dayReflection;
+    scene.environmentIntensity=night ? .62 : .72;
+    sun.color.setHex(night ? 0xa8c4ff : 0xffe5be);
+    sun.intensity=night ? .044 : 3.65;
+    fill.color.setHex(night ? 0xa7b9d8 : 0xf6f3ed);
+    fill.groundColor.setHex(night ? 0x836a5a : 0xd9bfa4);
+    fill.intensity=night ? .62 : .98;
+    windowBounce.intensity=night ? .40 : .56;
+    frontBounce.intensity=night ? .28 : .42;
+    writingBounce.intensity=night ? 0 : .91;
+    blindFinish.emissiveIntensity=night ? .02 : .43;
+    deskGlow.intensity=night ? 1.25 : .07;
+    deskBeam.intensity=night ? 3.25 : .49;
+    diffuser.emissiveIntensity=night ? 1.85 : .53;
+    display.emissiveIntensity=night ? .58 : .84;
+    viewMaterial.map=night ? nightSky : daySky;
+    viewMaterial.color.setScalar(night ? .55 : 1.03);
+    glass.material.opacity=night ? .15 : .07;
     onUpdate();
   }
-
-  // These visibility maps were traced against the furnished room, including the instanced keys and furniture.
-  for (const [name,url] of [
-    ['desk-wall','./media/study/ao-desk-wall.webp'],
-    ['floor','./media/study/ao-floor.webp'],['back-wall','./media/study/ao-back-wall.webp'],
-    ['ceiling','./media/study/ao-ceiling.webp'],['rug','./media/study/ao-rug.webp'],
-    ['worktop','./media/study/ao-worktop.webp'],['desk-felt','./media/study/ao-desk-felt.webp']
-  ]) {
-    const surface=scene.getObjectByName(name);
-    surface.material=surface.material.clone();
-    const ao=surfaceMap(url,1,1,false);
-    ao.channel=name==='worktop' ? 1 : 0;
-    surface.material.aoMap=ao;
-    surface.material.aoMapIntensity=.92;
-  }
-
+  setNight(false);
   scene.updateMatrixWorld(true);
-  const center = monitorSurface.getWorldPosition(new THREE.Vector3());
-  const normal = new THREE.Vector3(0, 0, 1).applyQuaternion(monitor.getWorldQuaternion(new THREE.Quaternion()));
-  return { scene, monitorSurface, screenWidth, screenHeight, center, normal, setPreview, setHover, setNight };
+  const center=monitorSurface.getWorldPosition(new THREE.Vector3());
+  const normal=new THREE.Vector3(0,0,1).applyQuaternion(monitor.getWorldQuaternion(new THREE.Quaternion()));
+  return {scene,monitorSurface,screenWidth,screenHeight,center,normal,setPreview,setHover,setNight};
 }

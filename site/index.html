@@ -12,6 +12,11 @@
 </head>
 <body>
   <section id="room-screen" class="room-screen" aria-label="三维书房" data-aria-en="3D study">
+    <img id="room-poster" alt="" hidden fetchpriority="high"
+      data-day-desktop="./media/study/room-poster-day-desktop.webp"
+      data-night-desktop="./media/study/room-poster-night-desktop.webp"
+      data-day-phone="./media/study/room-poster-day-phone.webp"
+      data-night-phone="./media/study/room-poster-night-phone.webp">
     <div id="room-loading" class="study-loading" role="status" aria-live="polite">
       <div class="study-loading-content">
         <svg viewBox="0 0 180 102" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
@@ -21,7 +26,10 @@
         <strong>EmbodiedStudio</strong>
         <span id="loading-status" data-en="Preparing the 3D study">正在准备三维书房</span>
         <div class="study-loading-track" aria-hidden="true"><i id="loading-progress"></i></div>
-        <button id="retry-room" type="button" hidden data-en="Retry">重新加载</button>
+        <div id="room-recovery" class="study-loading-actions" hidden>
+          <button id="retry-room" type="button" data-en="Retry">重新加载</button>
+          <button id="open-paper-fallback" type="button" data-en="Open project page">进入项目主页</button>
+        </div>
       </div>
     </div>
     <canvas id="lab-view" inert role="button" tabindex="-1" aria-label="点击书房电脑进入主页" data-aria-en="Select the computer screen to open the page"></canvas>
