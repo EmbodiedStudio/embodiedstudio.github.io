@@ -164,23 +164,54 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   box(.13, .51, 8.04, -3.43, .255, .34, plaster);
   box(.13, .46, 8.04, -3.43, 2.84, .34, plaster);
 
-  // A single continuous view beyond the four glazing panels.
-  const daySky = surfaceMap('./media/study/garden.webp', 1, 1);
-  const nightSky = surfaceMap('./media/study/garden-night.webp',1,1);
+  // A recessed garden window to the left of the monitor and a quiet plaster return behind it.
+  const daySky = surfaceMap('./media/study/window-garden.webp', 1, 1);
+  const nightSky = surfaceMap('./media/study/window-garden-night.webp',1,1);
 
   const windowPanes = [];
   for (const [i, z] of [-2.62, -.94, .74, 2.42].entries()) {
+    if (i === 1) continue;
+    if (i === 2) {
+      box(.15,3.04,3.36,-3.39,1.52,-.10,plaster).name='desk-wall';
+      box(.18,2.13,.035,-3.35,1.56,z+.83,paleOak);
+      continue;
+    }
     const glass = picture(1.69, 2.10, -3.40, 1.56, z, daySky);
     glass.rotateY(Math.PI / 2);
     const uv = glass.geometry.getAttribute('uv');
     for (let j = 0; j < uv.count; j++) {
-      uv.setXY(j, .15 + ((3 - i) + uv.getX(j)) * .113, .36 + uv.getY(j) * .30);
+      uv.setXY(j, (i===3 ? .27 : (3-i)/4) + uv.getX(j)/4, uv.getY(j));
     }
     windowPanes.push(glass);
     box(.085, 2.14, .045, -3.35, 1.56, z - .83, walnut);
-    box(.05, .028, 1.66, -3.34, 1.73, z, walnut);
+    if (i !== 3) box(.05,.028,1.66,-3.34,1.73,z,walnut);
   }
   box(.29, .068, 8.04, -3.30, .52, .34, oak);
+  // Deep sill and a woven Roman shade give the opening a visible reveal.
+  box(.36,.036,1.70,-3.26,.795,2.42,paleOak);
+  box(.14,.29,1.69,-3.40,.648,2.42,plaster);
+  const shadeCloth=canvasFabric.clone();
+  shadeCloth.color.setHex(0xcfb997);
+  shadeCloth.transparent = true;
+  shadeCloth.opacity = .69;
+  shadeCloth.depthWrite = false;
+  const blind=add(new THREE.PlaneGeometry(1.625,.86,40,32),shadeCloth,-3.286,2.17,2.42);
+  blind.rotation.y=Math.PI/2;
+  const pleats=blind.geometry.attributes.position;
+  for(let i=0;i<pleats.count;i++){
+    const v=(pleats.getY(i)+.43)/.86;
+    pleats.setZ(i,.014*Math.cos(v*Math.PI*10)+.014*Math.pow(1-v,4));
+  }
+  blind.geometry.computeVertexNormals();
+  box(.026,.020,1.626,-3.26,1.742,2.42,oak);
+  // A short oak ledge picks up the window reveal without putting a line behind the display.
+  box(.18,.023,.49,-3.22,1.73,1.16,paleOak);
+  for(const [i,cover] of [sage,cream,walnut].entries()) {
+    const book=rounded(.115,.019,.19,-3.20,1.752+.020*i,1.26,cover,scene,.002);
+    book.rotation.y=(i-1)*.035;
+  }
+  const budProfile=[[0,0],[.037,0],[.045,.025],[.043,.065],[.025,.086],[.019,.102],[.014,.102],[.014,.088]];
+  add(new THREE.LatheGeometry(budProfile.map(([r,h])=>new THREE.Vector2(r,h)),48),ceramic,-3.21,1.742,1.02,scene);
   const reflectedGlass = new THREE.MeshPhysicalMaterial({
     transparent:true, opacity:.04, color:0x81928f, roughness:.12, metalness:.76, depthWrite:false
   });
@@ -246,9 +277,10 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   seatPillow.rotation.z=.23;
 
   // Woven studio rug
-  const rug = add(new THREE.PlaneGeometry(3.55,2.86),rugMat,.05,.009,.19);
+  const rug = add(new THREE.PlaneGeometry(2.64,2.30),rugMat,-2.08,.009,.88);
   rug.name='rug';
   rug.rotation.x = -Math.PI/2;
+  rug.rotation.z = Math.PI/2;
   rug.castShadow = false;
   const occlusion = imageTexture(128,128,ctx => {
     const gradient = ctx.createRadialGradient(64,64,0,64,64,64);
@@ -267,7 +299,7 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   }
 
   contactShadow(.55,.007,-1.63,1.32,1.16,.68);
-  contactShadow(1.03,.005,-2.65,.95,.82,.72);
+  contactShadow(-2.74,.005,3.36,.82,.72,.72);
 
 
   // Furniture is loaded independently of the clickable screen.
@@ -297,7 +329,7 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   rounded(.24, .026, .15, .05, .462, .035, sage, table);
 
   // Pleated paper glows from within at night. The lathed ribs stay in silhouette in daylight.
-  const pendant = group(.89,2.11,-2.02);
+  const pendant = group(-2.30,2.11,-1.88);
   const profile = [];
   for (let i=0;i<=160;i++) {
     const t=i/160, rib=Math.pow(.5+.5*Math.cos(2*Math.PI*t*20),5);
@@ -382,11 +414,11 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   const bowlShape=[[0,0],[.084,0],[.092,.02],[.16,.074],[.158,.084],[.142,.08],[.077,.033],[0,.022]];
   add(new THREE.LatheGeometry(bowlShape.map(([r,h])=>new THREE.Vector2(r,h)),64),
     ceramic,-1.29,.623,.19,library);
-  placeModel('./media/study/potted_plant_01.glb',scene,1.03,.014,-2.65,1.33,-.50);
+  placeModel('./media/study/potted_plant_01.glb',scene,-2.74,.014,3.36,.96,-.50);
 
   // ==================== HERO ARCHITECT STUDIO DESK ====================
-  const desk = group(-.66, 0, -.42);
-  desk.rotation.y=-.11;
+  const desk = group(-2.65, 0, .88);
+  desk.rotation.y=Math.PI / 2;
   contactShadow(0,.013,.10,2.85,1.4,.42,desk);
   // Tabletop + subtle walnut apron frame underneath
   rounded(2.02, .058, .94, 0, .775, 0, paleOak, desk, .018);
@@ -529,7 +561,7 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   for(const z of [-.003,.014]) rounded(.003,.004,.013,-.031,.020,z,ink,mouse,.001);
   contactShadow(-.10,.808,.209,.40,.17,.58,desk);
   contactShadow(.192,.808,.222,.092,.15,.50,desk);
-  contactShadow(-.76,.807,-.19,.19,.14,.66,desk);
+  contactShadow(.58,.807,.056,.19,.14,.66,desk);
 
   // Oak riser with a compact workstation and front-panel I/O underneath.
   rounded(.88,.022,.195,-.09,.889,-.197,paleOak,desk,.009);
@@ -557,7 +589,7 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   // A leather notebook sits open on the daylight side, within reach of the chair.
   placeModel('./media/study/binder_notebook.glb',desk,-.64,.806,.19,.022,.19);
   // Artisan ceramic coffee mug + latte art + walnut coaster
-  const mug = group(-.76, .806, -.19, desk);
+  const mug = group(.58, .806, .056, desk);
   cylinder(.064, .064, .010, 0, .005, 0, walnut, mug);
   const cupProfile=[[0,0],[.034,0],[.040,.005],[.044,.016],[.046,.079],
     [.0458,.087],[.0448,.089],[.0428,.089],[.042,.087],[.041,.080],[.038,.018],[.032,.013],[0,.013]];
@@ -582,14 +614,15 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   add(new THREE.TubeGeometry(handlePath,40,.0048,14,false),ceramic,0,0,0,mug);
 
   // A shallow tilting shade, a satin stem and a weighted clay base.
-  const tableLamp=group(.72,0,.05,desk);
+  const tableLamp=group(-.90,0,-.17,desk);
+  tableLamp.rotation.y=Math.PI;
   const sand = new THREE.MeshPhysicalMaterial({color:0xe7d9c5,roughness:.57,clearcoat:.16,clearcoatRoughness:.45});
   cylinder(.081,.089,.023,0,.817,0,sand,tableLamp);
   cylinder(.010,.011,.396,0,1.021,0,brass,tableLamp);
   add(new THREE.SphereGeometry(.018,24,16),brass,0,1.223,0,tableLamp);
   const shadePivot=group(-.055,1.224,0,tableLamp);
   shadePivot.rotation.z=-.23;
-  shadePivot.rotation.x=-.20;
+  shadePivot.rotation.x=.26;
   const shellProfile=[[.012,.069],[.047,.063],[.078,.046],[.105,.020],[.129,-.016],[.141,-.049],[.142,-.056],[.138,-.060]];
   add(new THREE.LatheGeometry(shellProfile.slice().reverse().map(([r,h])=>new THREE.Vector2(r,h)),80),sand,0,0,0,shadePivot);
   const reflector=new THREE.MeshStandardMaterial({color:0xf0e9d9,roughness:.7,emissive:0xffcb8c});
@@ -598,7 +631,7 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   const deskBeam=new THREE.SpotLight(0xffd8aa,0,3.8,Math.PI/3.15,.94,2);
   deskBeam.position.set(-.014,-.065,.01);
   shadePivot.add(deskBeam);
-  deskBeam.target.position.set(.23,.98,-.12);
+  deskBeam.target.position.set(-.20,.94,-.13);
   desk.add(deskBeam.target);
   deskBeam.castShadow=true;
   deskBeam.shadow.mapSize.set(768,768);
@@ -606,12 +639,12 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   deskBeam.shadow.normalBias=.002;
   deskBeam.shadow.bias=-.0003;
   const lampBounce=new THREE.PointLight(0xffcca0,0,1.8,2);
-  lampBounce.position.set(.36,.922,.072);
+  lampBounce.position.set(-.39,.94,-.10);
   desk.add(lampBounce);
   // ==================== PRO STUDIO MONITOR + ANIMATED CLICK AFFORDANCE ====================
   const screenWidth = .84, screenHeight = .525;
   const monitor = group(-.06, 1.245, -.19,desk);
-  monitor.rotation.y = -.065;
+
   // Precision anodized chassis
   rounded(screenWidth + .017, screenHeight + .022, .033, 0, 0, -.005, ink, monitor, .018);
   // Subtle status LED dot on bottom right bezel
@@ -815,6 +848,7 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
 
   // These visibility maps were traced against the furnished room, including the instanced keys and furniture.
   for (const [name,url] of [
+    ['desk-wall','./media/study/ao-desk-wall.webp'],
     ['floor','./media/study/ao-floor.webp'],['back-wall','./media/study/ao-back-wall.webp'],
     ['ceiling','./media/study/ao-ceiling.webp'],['rug','./media/study/ao-rug.webp'],
     ['worktop','./media/study/ao-worktop.webp'],['desk-felt','./media/study/ao-desk-felt.webp']

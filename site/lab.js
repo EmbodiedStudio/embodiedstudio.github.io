@@ -376,11 +376,13 @@ async function initRoom() {
       renderer.render(scene, camera);
     }
     function entrance() {
-      // In portrait, frame the screen and keys together; open the shot toward the reading chair as space permits.
-      const wide = THREE.MathUtils.smoothstep(camera.aspect, .72, 1.45);
-      const mix = (narrow, landscape) => THREE.MathUtils.lerp(narrow, landscape, wide);
-      deskShot.position.set(mix(.06,.32), mix(1.43,1.53), mix(1.37,1.89));
-      deskShot.lookAt(mix(-.71,-.42), mix(1.10,1.23), mix(-.63,-.66));
+      // Parallel desk and camera axes keep the worktop horizontal. Offset the camera itself
+      // to leave breathing room on the garden side, without turning it toward the monitor.
+      const wide = THREE.MathUtils.smoothstep(camera.aspect,.72,1.45);
+      const mix = (phone, landscape) => THREE.MathUtils.lerp(phone, landscape, wide);
+      const z = mix(1.075,1.30);
+      deskShot.position.set(mix(-.27,-.54),mix(1.45,1.35),z);
+      deskShot.lookAt(-2.85,mix(1.08,1.18),z);
       return { position: deskShot.position.clone(), orientation: deskShot.quaternion.clone() };
     }
     function fitMonitor() {
@@ -407,7 +409,7 @@ async function initRoom() {
       const w = canvas.clientWidth, h = canvas.clientHeight;
       if (!w || !h) return;
       camera.aspect = w / h;
-      camera.fov = THREE.MathUtils.lerp(57,42,THREE.MathUtils.smoothstep(camera.aspect,.72,1.45));
+      camera.fov = THREE.MathUtils.lerp(57,39,THREE.MathUtils.smoothstep(camera.aspect,.72,1.45));
       camera.updateProjectionMatrix();
       renderer.setSize(w, h, false);
       if (!flying && !document.body.classList.contains('paper-active')) reset(true);
