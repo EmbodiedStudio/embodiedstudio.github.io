@@ -265,7 +265,7 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
     shadow.rotation.x = -Math.PI/2;
     shadow.castShadow = shadow.receiveShadow = false;
   }
-  contactShadow(-.86,.013,.03,2.85,1.4,.42);
+
   contactShadow(.55,.007,-1.63,1.32,1.16,.68);
   contactShadow(1.03,.005,-2.65,.95,.82,.72);
 
@@ -297,7 +297,7 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   rounded(.24, .026, .15, .05, .462, .035, sage, table);
 
   // Pleated paper glows from within at night. The lathed ribs stay in silhouette in daylight.
-  const pendant = group(.56,2.11,-2.02);
+  const pendant = group(.89,2.11,-2.02);
   const profile = [];
   for (let i=0;i<=160;i++) {
     const t=i/160, rib=Math.pow(.5+.5*Math.cos(2*Math.PI*t*20),5);
@@ -385,8 +385,9 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   placeModel('./media/study/potted_plant_01.glb',scene,1.03,.014,-2.65,1.33,-.50);
 
   // ==================== HERO ARCHITECT STUDIO DESK ====================
-  const desk = group(-.86, 0, -.07);
-  desk.rotation.y=.23;
+  const desk = group(-.66, 0, -.42);
+  desk.rotation.y=-.11;
+  contactShadow(0,.013,.10,2.85,1.4,.42,desk);
   // Tabletop + subtle walnut apron frame underneath
   rounded(2.02, .058, .94, 0, .775, 0, paleOak, desk, .018);
   const topGeometry = new THREE.PlaneGeometry(1.997,.917);

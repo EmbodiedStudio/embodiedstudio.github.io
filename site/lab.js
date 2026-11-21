@@ -376,9 +376,11 @@ async function initRoom() {
       renderer.render(scene, camera);
     }
     function entrance() {
-      const portrait = camera.aspect < .82;
-      deskShot.position.set(portrait ? -.39 : .42, portrait ? 1.51 : 1.62, portrait ? 2.14 : 1.83);
-      deskShot.lookAt(portrait ? -.97 : -.64, portrait ? 1.22 : 1.17, -.46);
+      // In portrait, frame the screen and keys together; open the shot toward the reading chair as space permits.
+      const wide = THREE.MathUtils.smoothstep(camera.aspect, .72, 1.45);
+      const mix = (narrow, landscape) => THREE.MathUtils.lerp(narrow, landscape, wide);
+      deskShot.position.set(mix(-.19,.32), mix(1.56,1.53), mix(1.58,1.89));
+      deskShot.lookAt(mix(-.74,-.42), mix(1.13,1.23), -.66);
       return { position: deskShot.position.clone(), orientation: deskShot.quaternion.clone() };
     }
     function fitMonitor() {
@@ -394,23 +396,21 @@ async function initRoom() {
       camera.quaternion.copy(entryOrientation).multiply(new THREE.Quaternion().setFromEuler(motion.set(pitch, yaw, 0)));
       draw();
     }
-    function reset() {
+    function reset(keepLook = false) {
       const { position, orientation } = entrance();
-      yaw = 0;
-      pitch = 0;
+      if (!keepLook) yaw = pitch = 0;
       camera.position.copy(position);
-      camera.quaternion.copy(orientation);
       entryOrientation.copy(orientation);
-      draw();
+      lookAround(0, 0);
     }
     function resize() {
       const w = canvas.clientWidth, h = canvas.clientHeight;
       if (!w || !h) return;
       camera.aspect = w / h;
-      camera.fov = camera.aspect < .82 ? 57 : 45;
+      camera.fov = THREE.MathUtils.lerp(57,42,THREE.MathUtils.smoothstep(camera.aspect,.72,1.45));
       camera.updateProjectionMatrix();
       renderer.setSize(w, h, false);
-      if (!flying && !yaw && !pitch && !document.body.classList.contains('paper-active')) reset();
+      if (!flying && !document.body.classList.contains('paper-active')) reset(true);
       else draw();
     }
     function move(pose, duration, onProgress, onComplete) {
