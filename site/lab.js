@@ -219,6 +219,50 @@ window.addEventListener('keydown', event => {
   }
 });
 
+let packedRoomPromise;
+function loadPackedRoom() {
+  if (!window.studyPacks || typeof DecompressionStream === 'undefined') return null;
+  if (packedRoomPromise) return packedRoomPromise;
+  const packs=window.studyDownloads || window.studyPacks.map(pack=>({
+    ...pack, response:fetch(pack.url,{cache:'force-cache'})
+  }));
+  const total=packs.reduce((sum,pack)=>sum+pack.bytes,0);
+  const records=new Map();
+  let received=0;
+  packedRoomPromise=Promise.all(packs.map(async pack=>{
+    const response=await pack.response;
+    if (!response?.ok) throw new Error('Study archive unavailable');
+    const reader=response.body.getReader();
+    const chunks=[];
+    for (;;) {
+      const {done,value}=await reader.read();
+      if(done) break;
+      chunks.push(value);
+      received+=value.length;
+      loadBar.style.transform=`scaleX(${.72*Math.min(1,received/total)})`;
+    }
+    let data=new Blob(chunks);
+    const signature=new Uint8Array(await data.slice(0,2).arrayBuffer());
+    if(signature[0]===31 && signature[1]===139) {
+      data=await new Response(data.stream().pipeThrough(new DecompressionStream('gzip'))).blob();
+    }
+    const length=new DataView(await data.slice(0,4).arrayBuffer()).getUint32(0,true);
+    let offset=4+length;
+    const directory=JSON.parse(await data.slice(4,offset).text());
+    for(const [path,bytes] of directory) {
+      const type=path.endsWith('.glb')?'model/gltf-binary':'image/webp';
+      records.set(new URL(path,document.baseURI).href,{blob:data.slice(offset,offset+bytes,type)});
+      offset+=bytes;
+    }
+    if(offset!==data.size) throw new Error('Incomplete study archive');
+  })).then(()=>url=>{
+    const record=records.get(new URL(url,document.baseURI).href);
+    if(!record) return url;
+    return record.objectUrl ||= URL.createObjectURL(record.blob);
+  });
+  return packedRoomPromise;
+}
+
 async function initRoom() {
   if (cameraControl || roomStarting) return;
   roomStarting = true;
@@ -227,7 +271,8 @@ async function initRoom() {
   // from the paper starts its own sequence when the room is requested.
   const earliestReveal = (performance.getEntriesByName('paper-opened').length ? performance.now() : 0) + 3000;
   try {
-    if (location.protocol !== 'file:' && !document.querySelector('link[data-room-prefetch]')) {
+    const packed = loadPackedRoom();
+    if (!packed && location.protocol !== 'file:' && !document.querySelector('link[data-room-prefetch]')) {
       for (const model of ['potted_plant_01','lounge-chair','circuit_board']) {
         const link = document.createElement('link');
         link.rel = 'preload';
@@ -239,7 +284,7 @@ async function initRoom() {
         document.head.append(link);
       }
     }
-    const [THREE, { buildHome }] = await Promise.all([import('./vendor/three.module.js'), import('./room.js')]);
+    const [THREE, { buildHome }, resolveAsset] = await Promise.all([import('./vendor/three.module.js'), import('./room.js'), packed]);
     if (document.body.classList.contains('paper-active')) return;
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.6));
@@ -307,16 +352,17 @@ async function initRoom() {
           else preparePrograms();
         });
       },{
+        resolveAsset,
         start() {
           version++;
           finishing = assetsReady = false;
           if (failed) return;
-          progress = 0;
-          showProgress(0);
+          progress = resolveAsset ? .72 : 0;
+          showProgress(progress);
           lockRoom();
           statusLine.textContent=tr('正在准备三维书房','Preparing the 3D study');
         },
-        progress(url,loaded,total) { if (!failed) showProgress(.92*loaded/total); },
+        progress(url,loaded,total) { if (!failed) showProgress(resolveAsset ? .72+.20*loaded/total : .92*loaded/total); },
         error() { failed = true; failRoom(); },
         ready() { assetsReady = true; finishRoom(); }
       });

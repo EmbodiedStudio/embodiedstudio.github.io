@@ -39,6 +39,7 @@ function soften(w, h, d, radius = .038) {
 export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   const loading = new THREE.LoadingManager(lifecycle.ready, lifecycle.progress, lifecycle.error);
   loading.onStart = lifecycle.start;
+  if (lifecycle.resolveAsset) loading.setURLModifier(lifecycle.resolveAsset);
   const scene = new THREE.Scene();
   const dayBg = new THREE.Color(0xd8d0c3);
   const nightBg = new THREE.Color(0x141312);
