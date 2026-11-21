@@ -379,8 +379,8 @@ async function initRoom() {
       // In portrait, frame the screen and keys together; open the shot toward the reading chair as space permits.
       const wide = THREE.MathUtils.smoothstep(camera.aspect, .72, 1.45);
       const mix = (narrow, landscape) => THREE.MathUtils.lerp(narrow, landscape, wide);
-      deskShot.position.set(mix(-.19,.32), mix(1.56,1.53), mix(1.58,1.89));
-      deskShot.lookAt(mix(-.74,-.42), mix(1.13,1.23), -.66);
+      deskShot.position.set(mix(.06,.32), mix(1.43,1.53), mix(1.37,1.89));
+      deskShot.lookAt(mix(-.71,-.42), mix(1.10,1.23), mix(-.63,-.66));
       return { position: deskShot.position.clone(), orientation: deskShot.quaternion.clone() };
     }
     function fitMonitor() {
