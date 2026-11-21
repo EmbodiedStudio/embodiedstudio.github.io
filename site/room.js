@@ -1,4 +1,5 @@
 import * as THREE from './vendor/three.module.js';
+import { MeshoptDecoder } from './vendor/meshopt_decoder.mjs';
 import { GLTFLoader } from './vendor/GLTFLoader.js';
 
 const material = (color, roughness = .7, metalness = 0, map) =>
@@ -35,15 +36,17 @@ function soften(w, h, d, radius = .038) {
   return geo;
 }
 
-export function buildHome(previewUrl, onUpdate) {
+export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
+  const loading = new THREE.LoadingManager(lifecycle.ready, lifecycle.progress, lifecycle.error);
+  loading.onStart = lifecycle.start;
   const scene = new THREE.Scene();
   const dayBg = new THREE.Color(0xd8d0c3);
   const nightBg = new THREE.Color(0x141312);
   scene.background = dayBg.clone();
 
-  const loader = new THREE.TextureLoader();
+  const loader = new THREE.TextureLoader(loading);
   function surfaceMap(url, repeatX, repeatY, color = true) {
-    const map = loader.load(url, onUpdate);
+    const map = loader.load(url, () => onUpdate());
     map.wrapS = map.wrapT = THREE.RepeatWrapping;
     map.repeat.set(repeatX, repeatY);
     map.anisotropy = 8;
@@ -267,7 +270,7 @@ export function buildHome(previewUrl, onUpdate) {
 
 
   // Furniture is loaded independently of the clickable screen.
-  const furniture = new GLTFLoader();
+  const furniture = new GLTFLoader(loading).setMeshoptDecoder(MeshoptDecoder);
   function placeModel(url, parent, x, y, z, height, rotation, onPlaced) {
     furniture.load(url, ({ scene: model }) => {
       model.rotation.y = rotation;
@@ -281,7 +284,7 @@ export function buildHome(previewUrl, onUpdate) {
       });
       parent.add(model);
       if (onPlaced) onPlaced(model);
-      onUpdate();
+      onUpdate(true);
     });
   }
   placeModel('./media/study/potted_plant_04.glb',scene,-2.93,.56,-2.89,.30,.7);
@@ -689,7 +692,7 @@ export function buildHome(previewUrl, onUpdate) {
     if (currentPreview === url) return;
     currentPreview = url;
     const request = ++previewRequest;
-    new THREE.TextureLoader().load(url, map => {
+    new THREE.TextureLoader(loading).load(url, map => {
       if (request !== previewRequest) {
         map.dispose();
         return;

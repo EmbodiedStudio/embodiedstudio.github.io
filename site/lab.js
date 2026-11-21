@@ -1,6 +1,3 @@
-import * as THREE from './vendor/three.module.js';
-import { buildHome } from './room.js';
-import { setupStudy } from './study.js';
 import { tr } from './locale.js';
 
 const canvas = document.getElementById('lab-view');
@@ -14,6 +11,41 @@ const sectionHashes = new Set(['#paper-title', '#abstract', '#method', '#gallery
 const THEME_KEY = 'embodiedstudio.homepage.night';
 
 let cameraControl = null;
+let roomStarting = false, roomReady = false;
+let studyPromise;
+const curtain = document.getElementById('room-loading');
+const statusLine = document.getElementById('loading-status');
+const loadBar = document.getElementById('loading-progress');
+const retry = document.getElementById('retry-room');
+retry.addEventListener('click', () => location.reload());
+
+function lockRoom() {
+  roomReady = false;
+  canvas.inert = true;
+  canvas.tabIndex = -1;
+  document.body.classList.remove('room-ready');
+  curtain.hidden = false;
+  curtain.classList.remove('reveal');
+}
+function failRoom() {
+  lockRoom();
+  statusLine.textContent = tr('书房资源未能完整载入', 'The study could not finish loading');
+  retry.hidden = false;
+}
+
+function preparePaper() {
+  if (!studyPromise) {
+    for (const image of panel.querySelectorAll('img[data-paper-src]')) {
+      image.src = image.dataset.paperSrc;
+      image.removeAttribute('data-paper-src');
+    }
+    studyPromise = import('./study.js').then(({setupStudy}) => setupStudy()).catch(error => {
+      studyPromise = null;
+      console.error('Could not load the paper interactions', error);
+    });
+  }
+  return studyPromise;
+}
 let flying = false;
 let isNight = false;
 
@@ -58,7 +90,6 @@ for (const btn of themeToggles) {
 }
 applyTheme(isNight, false);
 
-setupStudy();
 window.addEventListener('paper-language-change', () => {
   applyTheme(isNight, false);
 });
@@ -105,6 +136,8 @@ function updateLocation(page) {
 
 function presentPaper(replaceUrl = true, focusTitle = false) {
   document.body.classList.add('paper-active');
+  preparePaper();
+  performance.mark('paper-opened');
   document.body.classList.remove('flying', 'handoff');
   panel.style.removeProperty('opacity');
   panel.inert = false;
@@ -123,8 +156,9 @@ function presentPaper(replaceUrl = true, focusTitle = false) {
 }
 
 function openPaper() {
-  if (flying || document.body.classList.contains('paper-active')) return;
-  if (!cameraControl || reducedMotion.matches) {
+  if (!roomReady || !cameraControl || flying || document.body.classList.contains('paper-active')) return;
+  preparePaper();
+  if (reducedMotion.matches) {
     presentPaper(true, true);
     return;
   }
@@ -151,6 +185,14 @@ function returnToRoom() {
   roomScreen.removeAttribute('aria-hidden');
   document.body.classList.remove('paper-active');
   updateLocation(false);
+  if (!roomReady) {
+    lockRoom();
+    if (cameraControl) {
+      cameraControl.setActive(true);
+      cameraControl.reset();
+      return;
+    }
+  }
   if (!cameraControl) {
     initRoom();
     return;
@@ -177,9 +219,28 @@ window.addEventListener('keydown', event => {
   }
 });
 
-function initRoom() {
-  if (cameraControl) return;
+async function initRoom() {
+  if (cameraControl || roomStarting) return;
+  roomStarting = true;
+  lockRoom();
+  // Include initial document loading in the opening sequence. A later first visit
+  // from the paper starts its own sequence when the room is requested.
+  const earliestReveal = (performance.getEntriesByName('paper-opened').length ? performance.now() : 0) + 3000;
   try {
+    if (location.protocol !== 'file:' && !document.querySelector('link[data-room-prefetch]')) {
+      for (const model of ['potted_plant_01','lounge-chair','circuit_board']) {
+        const link = document.createElement('link');
+        link.rel = 'preload';
+        link.as = 'fetch';
+        link.crossOrigin = 'anonymous';
+        link.fetchPriority = 'low';
+        link.href = './media/study/' + model + '.glb';
+        link.dataset.roomPrefetch = '';
+        document.head.append(link);
+      }
+    }
+    const [THREE, { buildHome }] = await Promise.all([import('./vendor/three.module.js'), import('./room.js')]);
+    if (document.body.classList.contains('paper-active')) return;
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.6));
     renderer.shadowMap.enabled = true;
@@ -191,14 +252,73 @@ function initRoom() {
 
     const camera = new THREE.PerspectiveCamera(45, 1, .025, 24);
     const deskShot = new THREE.PerspectiveCamera();
-    let queuedDraw = 0;
+    let queuedDraw = 0, warmupRunning = false, assetsReady = false, failed = false;
+    let version = 0, finishing = false, openedOnce = false, progress = 0;
+    function preparePrograms() {
+      if (warmupRunning || assetsReady || !roomVisible) return;
+      warmupRunning = true;
+      renderer.compileAsync(scene, camera).catch(() => {}).finally(() => { warmupRunning = false; });
+    }
+    function showProgress(value) {
+      progress = Math.max(progress,value);
+      loadBar.style.transform = `scaleX(${progress})`;
+    }
+    function finishRoom() {
+      if (failed || finishing || !assetsReady || !roomVisible) return;
+      finishing = true;
+      const current = version;
+      statusLine.textContent = tr('正在完成渲染', 'Rendering the study');
+      draw();
+      const gl = renderer.getContext();
+      const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE,0);
+      if (!fence) { failed = true; failRoom(); return; }
+      gl.flush();
+      function waitForFrame() {
+        if (current !== version || failed) { gl.deleteSync(fence); return; }
+        const state = gl.clientWaitSync(fence,0,0);
+        if (state === gl.TIMEOUT_EXPIRED) { requestAnimationFrame(waitForFrame); return; }
+        gl.deleteSync(fence);
+        if (state === gl.WAIT_FAILED) { failed = true; failRoom(); return; }
+        performance.mark('room-frame-complete');
+        showProgress(1);
+        const fade = reducedMotion.matches ? 0 : 180;
+        setTimeout(() => {
+          if (current !== version || failed) return;
+          curtain.classList.add('reveal');
+          setTimeout(() => {
+            if (current !== version || failed) return;
+            curtain.hidden = true;
+            canvas.inert = false;
+            canvas.tabIndex = 0;
+            roomReady = openedOnce = true;
+            document.body.classList.add('room-ready');
+            performance.mark('room-interactive');
+          },fade);
+        },openedOnce ? 0 : Math.max(0,earliestReveal-performance.now()-fade));
+      }
+      requestAnimationFrame(waitForFrame);
+    }
     const { scene, monitorSurface, screenWidth, screenHeight, center, normal, setPreview, setHover, setNight } =
-      buildHome(previewUrl(), () => {
+      buildHome(previewUrl(), geometryAdded => {
         renderer.shadowMap.needsUpdate = true;
-        if (!queuedDraw) queuedDraw=requestAnimationFrame(() => {
+        if ((roomReady || geometryAdded) && !queuedDraw) queuedDraw=requestAnimationFrame(() => {
           queuedDraw=0;
-          if (roomVisible) draw();
+          if (roomReady) draw();
+          else preparePrograms();
         });
+      },{
+        start() {
+          version++;
+          finishing = assetsReady = false;
+          if (failed) return;
+          progress = 0;
+          showProgress(0);
+          lockRoom();
+          statusLine.textContent=tr('正在准备三维书房','Preparing the 3D study');
+        },
+        progress(url,loaded,total) { if (!failed) showProgress(.92*loaded/total); },
+        error() { failed = true; failRoom(); },
+        ready() { assetsReady = true; finishRoom(); }
       });
     const entryOrientation = new THREE.Quaternion();
     const motion = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -206,6 +326,7 @@ function initRoom() {
     let pointer = null, yaw = 0, pitch = 0, animation = 0, hoveringScreen = false, roomVisible = true;
 
     function draw() {
+      if (!assetsReady || !roomVisible) return;
       renderer.render(scene, camera);
     }
     function entrance() {
@@ -270,7 +391,8 @@ function initRoom() {
 
     function setActive(active) {
       roomVisible = active;
-      if (active) draw();
+      if (active && !roomReady) finishRoom();
+      else if (active) draw();
     }
 
     function monitorHit(event) {
@@ -291,7 +413,7 @@ function initRoom() {
 
 
     canvas.addEventListener('pointerdown', event => {
-      if (event.button !== 0 || flying) return;
+      if (!roomReady || event.button !== 0 || flying) return;
       pointer = { id: event.pointerId, sx: event.clientX, sy: event.clientY, x: event.clientX, y: event.clientY, moved: false };
       canvas.setPointerCapture(event.pointerId);
     });
@@ -340,15 +462,20 @@ function initRoom() {
     setNight(isNight);
     resize();
     new ResizeObserver(resize).observe(canvas);
+    requestAnimationFrame(preparePrograms);
   } catch (error) {
     console.error('Could not open the study', error);
-    presentPaper(true, true);
+    failRoom();
+  } finally {
+    roomStarting = false;
   }
 }
 
 if (new URLSearchParams(location.search).get('view') === 'paper' || sectionHashes.has(location.hash)) {
   presentPaper(false);
-  if (sectionHashes.has(location.hash)) requestAnimationFrame(() => document.querySelector(location.hash)?.scrollIntoView());
+  if (sectionHashes.has(location.hash)) preparePaper().then(() => requestAnimationFrame(() => {
+    if (sectionHashes.has(location.hash)) document.querySelector(location.hash)?.scrollIntoView();
+  }));
 } else {
   initRoom();
 }

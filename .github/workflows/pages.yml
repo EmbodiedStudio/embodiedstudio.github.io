@@ -34,8 +34,12 @@ jobs:
           done
           cd site
           sha256sum --check ../models.sha256
+      - name: Bundle and split browser modules
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
       - uses: actions/upload-pages-artifact@v5.0.0
         with:
-          path: site
+          path: _site
       - id: deployment
         uses: actions/deploy-pages@v5.0.1

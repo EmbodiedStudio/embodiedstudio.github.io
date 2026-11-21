@@ -1,4 +1,3 @@
-import * as THREE from './vendor/three.module.js';
 import { studyData } from './study-data.js';
 import { corpus } from './corpus.js';
 import { tr } from './locale.js';
@@ -428,12 +427,14 @@ function gallery(lightbox) {
     show.disabled = true;
     status.textContent = tr('正在载入 3D 场景…', 'Loading 3D scene…');
     try {
-      viewer ??= createViewer(canvas);
-      const [{ GLTFLoader }, response] = await Promise.all([
+      const [THREE, { GLTFLoader }, response] = await Promise.all([
+        import('./vendor/three.module.js'),
         import('./vendor/GLTFLoader.js'),
         fetch(selected.model, { signal: task.signal })
       ]);
+      if (task.signal.aborted) return;
       if (!response.ok) throw new Error('Model unavailable');
+      viewer ??= createViewer(canvas, THREE);
       const bytes = await response.arrayBuffer();
       const representation = await new GLTFLoader().parseAsync(bytes, '');
       if (task.signal.aborted) {
@@ -539,7 +540,7 @@ function disposeModel(model) {
   for (const surface of materials) surface.dispose();
 }
 
-function createViewer(canvas) {
+function createViewer(canvas, THREE) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0xeeede6);
   const direct = new THREE.DirectionalLight(0xfff9ed, 2.7);

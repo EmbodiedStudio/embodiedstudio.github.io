@@ -1,0 +1,11 @@
+{
+  "name": "embodiedstudio-project-site",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "meshoptimizer": "1.3.0"
+  }
+}

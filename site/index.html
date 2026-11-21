@@ -6,11 +6,25 @@
   <meta name="theme-color" content="#f5f3ec">
   <meta name="description" content="EmbodiedStudio：面向具身学习与评测的任务驱动仿真生成平台。">
   <title>EmbodiedStudio — Task-Driven Simulation Generation Platform</title>
+  <link rel="modulepreload" href="./lab.js">
+  <link rel="modulepreload" href="./locale.js">
   <link rel="stylesheet" href="./site.css">
 </head>
 <body>
   <section id="room-screen" class="room-screen" aria-label="三维书房" data-aria-en="3D study">
-    <canvas id="lab-view" role="button" tabindex="0" aria-label="点击书房电脑进入主页" data-aria-en="Select the computer screen to open the page"></canvas>
+    <div id="room-loading" class="study-loading" role="status" aria-live="polite">
+      <div class="study-loading-content">
+        <svg viewBox="0 0 180 102" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+          <path class="draw-monitor" pathLength="1" d="M58 59V18q0-3 3-3h58q3 0 3 3v38q0 3-3 3H58m32 1v9m-12 0h24"/>
+          <path class="draw-desk" pathLength="1" d="M18 75h144m-132 0-3 18m121-18 3 18m-26-23h20m-10 0V47l-8-6m-8 7q0-12 12-12l6 7z"/>
+        </svg>
+        <strong>EmbodiedStudio</strong>
+        <span id="loading-status" data-en="Preparing the 3D study">正在准备三维书房</span>
+        <div class="study-loading-track" aria-hidden="true"><i id="loading-progress"></i></div>
+        <button id="retry-room" type="button" hidden data-en="Retry">重新加载</button>
+      </div>
+    </div>
+    <canvas id="lab-view" inert role="button" tabindex="-1" aria-label="点击书房电脑进入主页" data-aria-en="Select the computer screen to open the page"></canvas>
     <button type="button" class="room-light-switch theme-switch" data-theme-toggle aria-pressed="false">
             <svg class="icon-sun" viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="10" cy="10" r="3.6"/><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4"/></svg>
             <svg class="icon-moon" viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M16.2 12.6A6.5 6.5 0 0 1 7.4 3.8a6.7 6.7 0 1 0 8.8 8.8Z"/></svg>
@@ -82,7 +96,7 @@
 
       <figure class="original-figure hero-teaser">
         <button type="button" class="zoomable-figure" data-zoom-src="./media/corpus/teaser.webp" data-zoom-zh="按任务生成的三尺度仿真场景及其构建、评分与机器人执行经验" data-zoom-en="Task-conditioned simulation scenes across three scales with construction, rubric, and execution experience" data-zoom-download="EmbodiedStudio-teaser.webp" aria-label="放大查看总览图" data-aria-en="Inspect overview figure">
-          <img src="./media/corpus/teaser.webp" alt="EmbodiedStudio 多尺度生成场景、构建经验、任务评分与机器人执行总览" data-alt-en="EmbodiedStudio overview of multi-scale generated scenes, construction experience, task rubrics, and robot execution">
+          <img data-paper-src="./media/corpus/teaser.webp" alt="EmbodiedStudio 多尺度生成场景、构建经验、任务评分与机器人执行总览" data-alt-en="EmbodiedStudio overview of multi-scale generated scenes, construction experience, task rubrics, and robot execution">
           <span class="zoom-badge" data-en="Zoom">放大查看</span>
         </button>
         <figcaption data-en="Task-conditioned scenes across tabletop, single-room, and multi-room scales, paired with construction, rubric, and execution experience.">涵盖桌面、单房间与多房间尺度的任务驱动仿真场景，及关联的构建、评分与机器人执行经验。</figcaption>
@@ -166,14 +180,14 @@
           <div class="learning-grid learning-figures">
             <figure class="original-figure">
               <button type="button" class="zoomable-figure" data-zoom-src="./media/corpus/layout-variation.webp" data-zoom-zh="同一场景程序编译出的训练与留出测试布局" data-zoom-en="Compiled training and held-out test layout variants" data-zoom-download="EmbodiedStudio-layout-variation.webp" aria-label="放大查看布局变体" data-aria-en="Inspect layout variants">
-                <img src="./media/corpus/layout-variation.webp" alt="训练与留出布局变体" data-alt-en="Training and held-out layout variants" loading="lazy">
+                <img data-paper-src="./media/corpus/layout-variation.webp" alt="训练与留出布局变体" data-alt-en="Training and held-out layout variants" loading="lazy">
                 <span class="zoom-badge" data-en="Zoom">放大查看</span>
               </button>
               <figcaption data-en="Compiled training layouts (a–c) and held-out test layout (d).">训练布局（a–c）与留出测试布局（d）。</figcaption>
             </figure>
             <figure class="original-figure">
               <button type="button" class="zoomable-figure" data-zoom-src="./media/corpus/apple-policy.webp" data-zoom-zh="π₀.₅ 苹果摆放策略在留出布局上微调前后对比" data-zoom-en="Apple placement rollouts before and after fine-tuning" data-zoom-download="EmbodiedStudio-apple-policy.webp" aria-label="放大查看策略对比" data-aria-en="Inspect policy rollouts">
-                <img src="./media/corpus/apple-policy.webp" alt="苹果摆放策略微调前后" data-alt-en="Apple placement before and after fine-tuning" loading="lazy">
+                <img data-paper-src="./media/corpus/apple-policy.webp" alt="苹果摆放策略微调前后" data-alt-en="Apple placement before and after fine-tuning" loading="lazy">
                 <span class="zoom-badge" data-en="Zoom">放大查看</span>
               </button>
               <figcaption data-en="Apple placement rollouts on the held-out layout before and after fine-tuning.">苹果摆放策略在留出布局上微调前后的执行回放。</figcaption>
@@ -243,7 +257,7 @@
         <summary data-en="Qualitative comparison against 5 baselines">场景定性对照（对比 5 种基线方法）</summary>
         <figure class="original-figure comparison-figure">
           <button type="button" class="zoomable-figure" data-zoom-src="./media/corpus/comparison.webp" data-zoom-zh="桌面、单房间与多房间尺度上的多方法场景定性对照" data-zoom-en="Qualitative scene comparison across tabletop, single-room, and multi-room tasks" data-zoom-download="EmbodiedStudio-comparison.webp" aria-label="放大查看场景对照图" data-aria-en="Inspect qualitative comparison">
-            <img src="./media/corpus/comparison.webp" alt="场景定性对照" data-alt-en="Qualitative scene comparison" loading="lazy">
+            <img data-paper-src="./media/corpus/comparison.webp" alt="场景定性对照" data-alt-en="Qualitative scene comparison" loading="lazy">
             <span class="zoom-badge" data-en="Zoom">放大查看</span>
           </button>
         </figure>
