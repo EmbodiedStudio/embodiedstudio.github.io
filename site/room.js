@@ -204,14 +204,10 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   }
   blind.geometry.computeVertexNormals();
   box(.026,.020,1.626,-3.26,1.742,2.42,oak);
-  // A short oak ledge picks up the window reveal without putting a line behind the display.
-  box(.18,.023,.49,-3.22,1.73,1.16,paleOak);
-  for(const [i,cover] of [sage,cream,walnut].entries()) {
-    const book=rounded(.115,.019,.19,-3.20,1.752+.020*i,1.26,cover,scene,.002);
-    book.rotation.y=(i-1)*.035;
+  for (const [i,cover] of [walnut,sage].entries()) {
+    const volume=rounded(.148,.025,.216,-3.22,.827+i*.026,2.55,cover,scene,.003);
+    volume.rotation.y=.06-i*.10;
   }
-  const budProfile=[[0,0],[.037,0],[.045,.025],[.043,.065],[.025,.086],[.019,.102],[.014,.102],[.014,.088]];
-  add(new THREE.LatheGeometry(budProfile.map(([r,h])=>new THREE.Vector2(r,h)),48),ceramic,-3.21,1.742,1.02,scene);
   const reflectedGlass = new THREE.MeshPhysicalMaterial({
     transparent:true, opacity:.04, color:0x81928f, roughness:.12, metalness:.76, depthWrite:false
   });
@@ -262,6 +258,18 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
 
   const inkPrint = surfaceMap('./media/study/circuit-study.webp',1,1);
   const printPaper=material(0xfffcf5,.99,0,inkPrint);
+  // From the front, the sill plant and this smaller print flank the monitor at different heights.
+  const displayLedge = group(-3.22,1.66,.62);
+  box(.18,.023,.61,0,0,0,paleOak,displayLedge);
+  for (const [i,cover] of [sage,cream,walnut].entries()) {
+    const book=rounded(.115,.019,.19,.02,.022+.020*i,.14,cover,displayLedge,.002);
+    book.rotation.y=(i-1)*.035;
+  }
+  const studyPrint = group(.002,.012,-.13,displayLedge);
+  studyPrint.rotation.set(-.12,Math.PI/2,0,'YXZ');
+  box(.205,.236,.013,0,.118,0,walnut,studyPrint);
+  box(.195,.226,.002,0,.118,.007,cream,studyPrint);
+  add(new THREE.PlaneGeometry(.164,.193),printPaper,0,.118,.009,studyPrint);
   // Low window joinery follows the glazing and turns into a reading seat at its far end.
   const windowSeat=group(-2.94,0,-1.71);
   box(.74,.37,2.92,0,.23,0,paleOak,windowSeat);
@@ -299,7 +307,7 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   }
 
   contactShadow(.55,.007,-1.63,1.32,1.16,.68);
-  contactShadow(-2.74,.005,3.36,.82,.72,.72);
+  contactShadow(-3.23,.814,2.29,.28,.29,.52);
 
 
   // Furniture is loaded independently of the clickable screen.
@@ -414,7 +422,7 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   const bowlShape=[[0,0],[.084,0],[.092,.02],[.16,.074],[.158,.084],[.142,.08],[.077,.033],[0,.022]];
   add(new THREE.LatheGeometry(bowlShape.map(([r,h])=>new THREE.Vector2(r,h)),64),
     ceramic,-1.29,.623,.19,library);
-  placeModel('./media/study/potted_plant_01.glb',scene,-2.74,.014,3.36,.96,-.50);
+  placeModel('./media/study/potted_plant_01.glb',scene,-3.23,.814,2.29,.47,-.50);
 
   // ==================== HERO ARCHITECT STUDIO DESK ====================
   const desk = group(-2.65, 0, .88);
@@ -742,8 +750,8 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   setPreview(previewUrl);
 
   // A light ash writing chair with a continuous curved plywood back and a linen seat.
-  const writingChair=group(.76,0,.91,desk);
-  writingChair.rotation.y=-.39;
+  const writingChair=group(-.53,0,.53,desk);
+  writingChair.rotation.y=-.94;
   const seat=add(new THREE.SphereGeometry(1,56,24),paleOak,0,.438,0,writingChair);
   seat.scale.set(.245,.023,.222);
   const upholstery=add(new THREE.SphereGeometry(1,56,24),mossLinen,0,.461,-.005,writingChair);

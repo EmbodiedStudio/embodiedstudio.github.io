@@ -380,9 +380,9 @@ async function initRoom() {
       // to leave breathing room on the garden side, without turning it toward the monitor.
       const wide = THREE.MathUtils.smoothstep(camera.aspect,.72,1.45);
       const mix = (phone, landscape) => THREE.MathUtils.lerp(phone, landscape, wide);
-      const z = mix(1.075,1.30);
-      deskShot.position.set(mix(-.27,-.54),mix(1.45,1.35),z);
-      deskShot.lookAt(-2.85,mix(1.08,1.18),z);
+      const z = mix(1.12,1.30);
+      deskShot.position.set(mix(.16,-.13),mix(1.34,1.23),z);
+      deskShot.lookAt(-2.85,mix(1.01,1.05),z);
       return { position: deskShot.position.clone(), orientation: deskShot.quaternion.clone() };
     }
     function fitMonitor() {
