@@ -949,15 +949,15 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
     sunCanopyBend.value=night ? 0 : canopyBend;
     scene.background.setHex(night ? 0x191b24 : 0xb7a286);
     scene.environment=night ? nightReflection : dayReflection;
-    scene.environmentIntensity=night ? .58 : .72;
+    scene.environmentIntensity=night ? .64 : .72;
     sun.color.setHex(night ? 0xa8c4ff : 0xffe5be);
     sun.intensity=night ? .044 : 4.28;
     fill.color.setHex(night ? 0xa7b9d8 : 0xf6f3ed);
-    fill.groundColor.setHex(night ? 0x836a5a : 0xd9bfa4);
-    fill.intensity=night ? .59 : .98;
+    fill.groundColor.setHex(night ? 0x8c7565 : 0xd9bfa4);
+    fill.intensity=night ? .70 : .98;
     windowBounce.color.setHex(night ? 0xa5bfdf : 0xeef4ff);
     windowBounce.intensity=night ? .37 : .56;
-    frontBounce.intensity=night ? .23 : .42;
+    frontBounce.intensity=night ? .27 : .42;
     // The short, warm bounce reaches the upholstered chair and the adjacent desk edge.
     writingBounce.color.setHex(night ? 0xffdeb7 : 0xffeed9);
     writingBounce.position.set(...(night ? [-.75,.87,-.39] : [-1.71,1.19,-.49]));

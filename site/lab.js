@@ -92,7 +92,7 @@ function applyTheme(nextNight, persist = true) {
   isNight = Boolean(nextNight);
   document.body.classList.toggle('is-night', isNight);
   document.documentElement.style.colorScheme = isNight ? 'dark' : 'light';
-  if (themeMeta) themeMeta.setAttribute('content', isNight ? '#111110' : '#f5f3ec');
+  if (themeMeta) themeMeta.setAttribute('content', getComputedStyle(document.body).getPropertyValue('--canvas').trim());
   for (const btn of themeToggles) {
     btn.setAttribute('aria-pressed', String(isNight));
     btn.setAttribute('aria-label', isNight ? tr('切换到日间模式', 'Switch to daylight mode') : tr('切换到暖夜模式', 'Switch to warm night mode'));

@@ -40,13 +40,13 @@
 
 body.is-night {
   color-scheme: dark;
-  --canvas: #111110;
-  --paper: #191917;
-  --surface: #22211f;
-  --surface-strong: #2c2b28;
-  --ink: #ededec;
-  --ink-soft: #d5d4ce;
-  --muted: #9b9a94;
+  --canvas: #24221f;
+  --paper: #2c2926;
+  --surface: #34312d;
+  --surface-strong: #3e3934;
+  --ink: #f0eae1;
+  --ink-soft: #dcd5cb;
+  --muted: #b3aba1;
   --line: rgba(244, 242, 235, 0.095);
   --line-strong: rgba(244, 242, 235, 0.18);
   --primary: #d97757;
@@ -57,8 +57,8 @@ body.is-night {
   --accent-soft: rgba(66, 181, 134, 0.14);
   --accent-border: rgba(66, 181, 134, 0.36);
   --wire-idle: rgba(244, 242, 235, 0.22);
-  --glass-bg: rgba(20, 20, 18, 0.80);
-  --glass-dark: rgba(20, 19, 17, 0.78);
+  --glass-bg: rgba(39, 36, 32, 0.86);
+  --glass-dark: rgba(36, 33, 30, 0.80);
   --glass-dark-border: rgba(255, 248, 236, 0.14);
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.25);
   --shadow-sm: 0 6px 20px rgba(0, 0, 0, 0.28);
@@ -94,7 +94,7 @@ body.is-night .theme-switch .icon-moon { display: none; }
   inset: 0;
   background: #d2c9b8;
 }
-body.is-night .room-screen { background: #161513; }
+body.is-night .room-screen { background: var(--canvas); }
 #room-poster {
   position: absolute;
   inset: 0;
@@ -2278,7 +2278,7 @@ body.flying .room-light-switch { visibility: hidden; }
   background:radial-gradient(ellipse at 50% 46%, #fffdf6, #f1ede2 78%); color:#393d35;
   transition:opacity .18s ease-out;
 }
-body.is-night .study-loading { background:radial-gradient(ellipse at 50% 46%,#302d28,#171918 78%); color:#eee5d4; }
+body.is-night .study-loading { background:radial-gradient(ellipse at 50% 46%,#39342e,var(--canvas) 78%); color:#eee5d4; }
 .study-loading[hidden] { display:none; }
 .study-loading.reveal { opacity:0; }
 .study-loading-content { display:grid; justify-items:center; gap:12px; text-align:center; }
