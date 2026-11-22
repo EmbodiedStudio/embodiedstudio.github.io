@@ -139,6 +139,22 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0xb7a286);
   const lighting = !lifecycle.skipBakedLighting;
+  const leafPhase = { value: 0 }, leafBreeze = { value: 0 };
+
+  function flexibleLeaves(mesh) {
+    mesh.material.onBeforeCompile = shader => {
+      shader.uniforms.leafPhase = leafPhase;
+      shader.uniforms.leafBreeze = leafBreeze;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nuniform float leafPhase;\nuniform float leafBreeze;')
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+          float tip = clamp((position.x + .020) / .043, 0.0, 1.0);
+          float flutter = sin(leafPhase + float(gl_InstanceID) * 2.39996);
+          transformed.z += leafBreeze * tip * tip * flutter;
+        `);
+    };
+    return mesh;
+  }
 
   function surfaceMap(url, isColor = true) {
     const texture = loader.load(url, () => onUpdate());
@@ -253,7 +269,7 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   const floor=planarFace('floor',4.60,4.83,0,0,.88,-Math.PI/2,0,floorFinish,(u,v)=>[v*2.60,(1-u)*2.54]);
   floor.castShadow=false;
   const backWall=windowWall('back-wall',4.58,roomHeight,[-1.854,-.336,.759,2.315],0,rearZ,0);
-  const leftWall=windowWall('left-wall',4.83,roomHeight,[-.65,1.15,.47,3.12],-2.29,.90,Math.PI/2);
+  const leftWall=windowWall('left-wall',4.83,roomHeight,[-.65,1.15,.47,3.277],-2.29,.90,Math.PI/2);
   const rightWall=planarFace('right-wall',4.83,roomHeight,2.29,roomHeight/2,.90,0,-Math.PI/2,plaster,(u,v)=>[u*2.3,v*2.3]);
   const ceiling=planarFace('ceiling',4.59,4.83,0,roomHeight,.90,Math.PI/2,0,material(0xeee1d1,.94));
   box(4.60,roomHeight,.12,0,roomHeight/2,3.33,plaster);
@@ -293,8 +309,14 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
     return [(u-.5)*1.544,(1-v)*.454,fold+ripple];
   });
   const shade=add(blind,blindFinish,windowX,1.841,rearZ+.018);
+  shade.name='wind-roman-shade';
   shade.castShadow=false;
+  const shadePositions=blind.attributes.position.setUsage(THREE.DynamicDrawUsage);
+  const shadeRest=shadePositions.array.slice();
+  const shadeDrop=Float32Array.from({length:shadePositions.count},(_,i)=>blind.attributes.uv.getY(i)**1.50);
+  blind.attributes.normal.setUsage(THREE.DynamicDrawUsage);
   const romanEdge=rounded(1.554,.029,.033,.006,windowX,1.833,rearZ+.04,blindFinish);
+  romanEdge.name='wind-roman-hem';
   romanEdge.castShadow=false;
   rounded(1.569,.026,.032,.003,windowX,2.299,rearZ+.026,frameWood);
 
@@ -327,6 +349,14 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
       }
     }
   }
+  // Real near foliage has depth and parallax against the distant courtyard photograph.
+  const nearWindow=group(-.342,1.80,-1.763);
+  nearWindow.name='wind-window-branches';
+  const nearStems=[], nearLeaves=[];
+  branch(nearStems,nearLeaves,vec(0,0,0),vec(-.43,.057,.020),vec(-.032,.043,.041),7,.006);
+  branch(nearStems,nearLeaves,vec(-.04,.009,.016),vec(-.283,-.146,.059),vec(-.027,-.034,-.018),6,.0038);
+  branch(nearStems,nearLeaves,vec(-.14,.033,.032),vec(-.409,-.052,.048),vec(-.021,.046,.013),5,.0025);
+  nearWindow.add(taperedSegments(nearStems,material(0x5f5538,.83),8),flexibleLeaves(plantLeaves(nearLeaves,1.32,true)));
   // Branch clusters outside the left window physically break the beam into dappled sunlight.
   const outdoorRoot=vec(-2.73,-.15,1.51);
   for(let i=0;i<19;i++) {
@@ -347,6 +377,28 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
     outdoorLeaves.push(vec(-2.56+.084*Math.sin(angle+index),y+r*Math.sin(angle)*edge,z+r*Math.cos(angle)*edge));
   }
   scene.add(taperedSegments(outdoorStems,material(0x61523b,.90),7),plantLeaves(outdoorLeaves,1.95));
+  // Dense sprays overlap at the aperture, while the gaps in between transmit smaller islands of sun.
+  const canopySprays=[
+    [3.135,.139,3.202,.378,72], [2.955,.128,3.107,.440,46], [2.799,.104,2.946,.371,72],
+    [2.687,.220,2.810,.557,72], [3.193,.271,3.454,.305,84],
+    [3.268,.437,3.438,.419,84], [2.967,.525,3.104,.526,84], [3.257,.536,3.406,.532,84],
+    [3.406,.539,3.495,.672,49]
+  ];
+  const sprayLeaves=[], sprayStems=[];
+  for(const [i,[ay,az,by,bz,leafCount]] of canopySprays.entries()) {
+    const from=vec(-2.57-.037*i,ay,az), to=vec(-2.56-.027*i,by,bz);
+    sprayStems.push({start:from,end:to,radius:.008});
+    for(let j=0;j<leafCount;j++) {
+      const t=(j+.5)/leafCount, angle=j*2.39996;
+      const fan=(.024+.029*Math.sin(Math.PI*t))*(.75+.25*Math.cos(angle*.33));
+      const point=from.clone().lerp(to,t);
+      point.y+=Math.cos(angle)*fan;
+      point.z+=Math.sin(angle)*fan*.78;
+      point.x+=Math.sin(j*1.45)*.038;
+      sprayLeaves.push(point);
+    }
+  }
+  scene.add(taperedSegments(sprayStems,material(0x61523b,.90),8),plantLeaves(sprayLeaves,2.46,true));
   // The desk keeps the rounded upright by the writing area and the open trestle below the screen side.
   const deskY=.742, deskZ=-1.115, slabHeight=.036, slabWidth=2.73, slabDepth=.69, lip=.006;
   const slab=new THREE.ExtrudeGeometry(roundRect(slabWidth-2*lip,slabDepth-2*lip,.054),{
@@ -377,6 +429,17 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
     const angle=u*2*Math.PI,c=Math.cos(angle),s=Math.sin(angle);
     return [.165*rad*Math.sign(c)*Math.abs(c)**.53,y,.301*rad*Math.sign(s)*Math.abs(s)**.67];
   });
+  const pedestalPositions=pedestal.attributes.position, pedestalUV=pedestal.attributes.uv;
+  let arc=0;
+  for(let ring=0;ring<=62;ring++) {
+    const at=ring*9+4;
+    if(ring) arc+=Math.hypot(pedestalPositions.getX(at)-pedestalPositions.getX(at-9),
+      pedestalPositions.getZ(at)-pedestalPositions.getZ(at-9));
+    for(let level=0;level<=8;level++) {
+      const vertex=ring*9+level;
+      pedestalUV.setXY(vertex,.08+arc/.92,.12+pedestalPositions.getY(vertex)/1.02);
+    }
+  }
   const pedestalOak=oak.clone();
   pedestalOak.color.multiplyScalar(1.32);
   add(pedestal,pedestalOak,-1.177,0,deskZ-.011);
@@ -428,7 +491,12 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
     vec(.197,.349,.017),vec(.182,.282,.027),vec(.097,.270,.047)].entries()) {
     branch(stems,leaves,root,tip,vec(i<3?-.016:.022,.026,.019),5,i%3===0?.0035:.0021);
   }
-  vase.add(taperedSegments(stems,material(0x62553a,.82),7),plantLeaves(leaves,.64));
+  const deskBranches=group(0,.138,0,vase);
+  deskBranches.name='wind-desk-branches';
+  const deskStems=taperedSegments(stems,material(0x62553a,.82),7);
+  const deskLeaves=flexibleLeaves(plantLeaves(leaves,.64));
+  deskStems.position.y=deskLeaves.position.y=-deskBranches.position.y;
+  deskBranches.add(deskStems,deskLeaves);
 
   // Satin brass base, curved stem and rolled reflector. The warm source comes from inside the shade.
   const lamp=group(-.633,deskY,-1.309);
@@ -440,7 +508,7 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
     vec(.052,.258,-.004),vec(.118,.287,.008),vec(.202,.310,.023)]);
   add(new THREE.TubeGeometry(neck,34,.007,10,false),brassRim,0,0,0,lamp);
   const shadeHead=group(.213,.291,.024,lamp);
-  shadeHead.rotation.z=-.19;
+  shadeHead.rotation.set(-.24,0,-.19);
   const dome=vaseShape([[.077,0],[.077,.006],[.071,.027],[.056,.057],[.036,.077],[.015,.082],[.005,.084],[0,.084],
     [.008,.080],[.021,.076],[.040,.063],[.060,.039],[.071,.013],[.072,.004],[.072,0]],brass,0,0,0,shadeHead,52);
   dome.material.side=THREE.DoubleSide;
@@ -449,9 +517,9 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   const bulb=add(new THREE.SphereGeometry(.014,20,13),diffuser,0,.008,0,shadeHead);
   bulb.castShadow=false;
   bulb.userData.skipBake=true;
-  const deskBeam=new THREE.SpotLight(0xffd2a4,0,2.82,Math.PI/3.25,.90,2);
+  const deskBeam=new THREE.SpotLight(0xffcf98,0,2.82,Math.PI/3.25,.93,2);
   deskBeam.position.set(0,-.007,0);
-  deskBeam.target.position.set(.042,-.285,.070);
+  deskBeam.target.position.set(-.16,-.264,.142);
   deskBeam.castShadow=true;
   deskBeam.shadow.mapSize.set(512,512);
   deskBeam.shadow.camera.near=.028;
@@ -460,7 +528,7 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   shadeHead.add(deskBeam,deskBeam.target);
   const deskGlow=new THREE.PointLight(0xffd1a1,0,2.2,2);
   deskGlow.name='deskLampBounce';
-  deskGlow.position.set(.193,.223,.061);
+  deskGlow.position.set(.145,.086,.213);
   lamp.add(deskGlow);
 
   const paper=material(0xe4d9be,.89), leather=material(0xa0815d,.73);
@@ -566,9 +634,65 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   });
   const monitorSurface=add(new THREE.PlaneGeometry(screenWidth,screenHeight),display,0,0,.006,monitor);
   monitorSurface.castShadow=false;
-  const rim=new THREE.MeshBasicMaterial({color:0xeadfc8, transparent:true,opacity:.12,toneMapped:false});
-  const hoverLight=add(new THREE.PlaneGeometry(screenWidth+.004,screenHeight+.004),rim,0,0,.005,monitor);
-  hoverLight.castShadow=hoverLight.receiveShadow=false;
+  const monitorFeedback = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    toneMapped: false,
+    uniforms: {
+      hintStrength: { value: .24 },
+      pressAge: { value: 1 },
+      pressUv: { value: new THREE.Vector2(.5, .5) },
+      screenAspect: { value: screenWidth / screenHeight }
+    },
+    vertexShader: `
+      varying vec2 screenUv;
+      void main() {
+        screenUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float hintStrength;
+      uniform float pressAge;
+      uniform vec2 pressUv;
+      uniform float screenAspect;
+      varying vec2 screenUv;
+
+      void main() {
+        vec2 scale = vec2(screenAspect, 1.0);
+        vec2 edge = min(screenUv, 1.0 - screenUv) * scale;
+        float rim = 1.0 - smoothstep(0.007, 0.027, min(edge.x, edge.y));
+        float cue = hintStrength * (0.20 + 0.80 * rim);
+
+        float distanceFromPress = length((screenUv - pressUv) * scale);
+        float radius = mix(0.014, 0.23, pressAge);
+        float ring = 1.0 - smoothstep(0.009, 0.026, abs(distanceFromPress - radius));
+        float center = 1.0 - smoothstep(0.012, 0.041, distanceFromPress);
+        float fade = (1.0 - pressAge) * (1.0 - pressAge);
+        float pulse = min(1.0, (0.67 * ring + 0.62 * center) * fade);
+        vec3 color = mix(vec3(0.92, 0.57, 0.24), vec3(1.0, 0.80, 0.41), pulse);
+        gl_FragColor = vec4(color, min(0.92, cue + pulse));
+        #include <colorspace_fragment>
+      }
+    `
+  });
+  const hint = add(monitorSurface.geometry,monitorFeedback,0,0,.007,monitor);
+  hint.castShadow=hint.receiveShadow=false;
+
+  let hoveringMonitor = false, pressedAt = -Infinity;
+  function updateMonitor(time, motionEnabled) {
+    const breath = motionEnabled ? .5 - .5 * Math.cos(time * (2 * Math.PI / 5000)) : .38;
+    monitorFeedback.uniforms.hintStrength.value = hoveringMonitor ? .70 : .14 + .27 * breath;
+    monitorFeedback.uniforms.pressAge.value = motionEnabled
+      ? THREE.MathUtils.clamp((time - pressedAt) / 460, 0, 1)
+      : 1;
+  }
+  function pulseMonitor(uv) {
+    if (uv) monitorFeedback.uniforms.pressUv.value.copy(uv);
+    else monitorFeedback.uniforms.pressUv.value.set(.5, .5);
+    pressedAt = performance.now();
+    onUpdate();
+  }
 
   const panelTextures = new Map();
   let monitorRequest=0, currentPreview='';
@@ -623,22 +747,30 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   const seatUV=cushion.attributes.uv, seatVertices=cushion.attributes.position;
   for(let i=0;i<seatUV.count;i++) seatUV.setXY(i,.5+seatVertices.getX(i)*2.8,.5+seatVertices.getZ(i)*2.8);
   add(cushion,linen,0,0,0,chair);
+  const backProfile=[[0,.7],[.01,.90],[.024,.96],[.042,.995],[.063,1],[.090,1],[.118,1],[.149,1],
+    [.172,.994],[.194,.97],[.211,.936],[.225,.893],[.236,.80],[.242,.59],[.245,.001]];
+  function backPoint(angle,height,radius) {
+    const c=Math.cos(angle), s=Math.sin(angle);
+    return vec(c*.202*radius,.487+height+.003*c*c,.188+.069*height/.245+s*.026*radius-.036*c*c);
+  }
   const backCushion=loftGeometry(48,14,(u,v)=>{
-    const angle=u*2*Math.PI;
-    const dims=[[0,.7],[.01,.90],[.024,.96],[.042,.995],[.063,1],[.090,1],[.118,1],[.149,1],
-      [.172,.994],[.194,.97],[.211,.936],[.225,.893],[.236,.80],[.242,.59],[.245,.001]];
-    const [h,radius]=dims[Math.round(v*14)];
-    return [Math.cos(angle)*.202*radius,.487+h+.003*Math.cos(angle)*Math.cos(angle),
-      .188+.069*h/.245+Math.sin(angle)*.026*radius-.036*Math.cos(angle)**2];
+    const [height,radius]=backProfile[Math.round(v*14)];
+    return backPoint(u*2*Math.PI,height,radius).toArray();
   });
   const textile=linen.clone(); textile.side=THREE.DoubleSide;
   const backUV=backCushion.attributes.uv, backVertices=backCushion.attributes.position;
   for(let i=0;i<backUV.count;i++) backUV.setXY(i,.5+backVertices.getX(i)*2.65,backVertices.getY(i)*2.68);
   add(backCushion,textile,0,0,0,chair);
-  const seam=new THREE.CatmullRomCurve3(Array.from({length:40},(_,i)=>{
-    const a=i*Math.PI/20,c=Math.cos(a),s=Math.sin(a);
-    return vec(.202*Math.sign(c)*Math.abs(c)**.56,.609+.108*Math.sign(s)*Math.abs(s)**.51,
-      .243+.035*s-.031*c*c);
+  const seam=new THREE.CatmullRomCurve3(Array.from({length:64},(_,i)=>{
+    const phase=i*Math.PI/32,c=Math.cos(phase),s=Math.sin(phase);
+    const height=.123+.102*Math.sign(s)*Math.abs(s)**.68;
+    const upper=backProfile.findIndex(([y])=>y>=height);
+    const [aY,aRadius]=backProfile[upper-1], [bY,bRadius]=backProfile[upper];
+    const radius=THREE.MathUtils.lerp(aRadius,bRadius,(height-aY)/(bY-aY));
+    const angle=Math.acos(.968*Math.sign(c)*Math.abs(c)**.53);
+    const point=backPoint(angle,height,radius);
+    point.z+=.00036;
+    return point;
   }),true);
   add(new THREE.TubeGeometry(seam,66,.00145,6,true),linen,0,0,0,chair);
 
@@ -674,13 +806,15 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   const shrub=group(.548,.019,.016,shelving);
   vaseShape([[0,0],[.038,0],[.045,.011],[.051,.063],[.051,.099],[.046,.102],[.042,.099],
     [.041,.085],[.038,.019],[0,.014]],ceramic,0,0,0,shrub,40);
+  const hangingVines=group(0,.092,0,shrub);
+  hangingVines.name='wind-shelf-vines';
   const vines=[], vineLeaves=[];
   for(let k=0;k<5;k++) {
     const points=[vec(0,.092,0),vec(.016*k-.05,.155+.018*Math.cos(k),.035),
       vec(.072+.016*k,.085-.018*k,.079),vec(.06+.041*Math.sin(k),-.065*k,.102+.009*k),
       vec(.048+.093*Math.sin(k+1),-.19-.047*k,.120+.018*k)];
     const stem=new THREE.CatmullRomCurve3(points);
-    add(new THREE.TubeGeometry(stem,26,.0013,7,false),material(0x626238,.84),0,0,0,shrub);
+    add(new THREE.TubeGeometry(stem,26,.0013,7,false),material(0x626238,.84),0,-hangingVines.position.y,0,hangingVines);
     for(let i=0;i<12;i++) {
       const at=stem.getPoint((i+.48)/13);
       const leaf=at.clone().add(vec(.017*Math.sin(i*2.2+k),.008*Math.cos(i*2.1),.008+.017*Math.sin(i*2.13)));
@@ -688,7 +822,10 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
       vineLeaves.push(leaf);
     }
   }
-  shrub.add(taperedSegments(vines,material(0x5d562f,.84),6),plantLeaves(vineLeaves,1.31,true));
+  const vineTwigs=taperedSegments(vines,material(0x5d562f,.84),6);
+  const trailingLeaves=flexibleLeaves(plantLeaves(vineLeaves,1.31,true));
+  vineTwigs.position.y=trailingLeaves.position.y=-hangingVines.position.y;
+  hangingVines.add(vineTwigs,trailingLeaves);
   const sun = new THREE.DirectionalLight(0xffe7c6,2.9);
   sun.name='windowSun';
   sun.position.set(-4.52,3.75,2.18);
@@ -727,7 +864,8 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   }
 
   function setHover(active) {
-    rim.opacity=active ? .38 : .12;
+    if (active === hoveringMonitor) return;
+    hoveringMonitor = active;
     onUpdate();
   }
   function setNight(enabled) {
@@ -736,7 +874,7 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
     scene.environment=night ? nightReflection : dayReflection;
     scene.environmentIntensity=night ? .62 : .72;
     sun.color.setHex(night ? 0xa8c4ff : 0xffe5be);
-    sun.intensity=night ? .044 : 3.65;
+    sun.intensity=night ? .044 : 4.28;
     fill.color.setHex(night ? 0xa7b9d8 : 0xf6f3ed);
     fill.groundColor.setHex(night ? 0x836a5a : 0xd9bfa4);
     fill.intensity=night ? .62 : .98;
@@ -744,8 +882,8 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
     frontBounce.intensity=night ? .28 : .42;
     writingBounce.intensity=night ? 0 : .91;
     blindFinish.emissiveIntensity=night ? .02 : .43;
-    deskGlow.intensity=night ? 1.25 : .07;
-    deskBeam.intensity=night ? 3.25 : .49;
+    deskGlow.intensity=night ? .57 : .045;
+    deskBeam.intensity=night ? 3.45 : .49;
     diffuser.emissiveIntensity=night ? 1.85 : .53;
     display.emissiveIntensity=night ? .58 : .84;
     viewMaterial.map=night ? nightSky : daySky;
@@ -753,9 +891,33 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
     glass.material.opacity=night ? .15 : .07;
     onUpdate();
   }
+  let previousWindPhase=0;
+  function updateWind(timeSeconds) {
+    if (!Number.isFinite(timeSeconds)) return;
+    const phase=(timeSeconds%16)*Math.PI/8;
+    if (phase===previousWindPhase) return;
+    previousWindPhase=phase;
+    const easing=.65*Math.sin(phase)+.24*Math.sin(3*phase)+.11*Math.sin(5*phase);
+    const ripple=Math.sin(8*phase)*(.47+.32*Math.sin(phase));
+    leafPhase.value=phase*8;
+    leafBreeze.value=.0047*(.56*easing+.44*ripple);
+    for(let i=0;i<shadePositions.count;i++) {
+      const offset=i*3, x=shadeRest[offset], drop=shadeDrop[i];
+      shadePositions.setXYZ(i,x+drop*.013*easing,shadeRest[offset+1]+drop*.007*easing**2,
+        shadeRest[offset+2]+drop*(.034*easing+.010*ripple*Math.cos(x*9)));
+    }
+    shadePositions.needsUpdate=true;
+    blind.computeVertexNormals();
+    romanEdge.position.set(windowX+.013*easing,1.833+.007*easing**2,rearZ+.04+.034*easing);
+    romanEdge.rotation.y=.014*ripple;
+    deskBranches.rotation.set(.029*easing+.012*ripple,0,-.075*easing);
+    hangingVines.rotation.set(.040*easing-.020*ripple,.020*easing,.089*easing);
+    nearWindow.rotation.set(.031*easing,.068*easing,.069*easing+.024*ripple);
+  }
+
   setNight(false);
   scene.updateMatrixWorld(true);
   const center=monitorSurface.getWorldPosition(new THREE.Vector3());
   const normal=new THREE.Vector3(0,0,1).applyQuaternion(monitor.getWorldQuaternion(new THREE.Quaternion()));
-  return {scene,monitorSurface,screenWidth,screenHeight,center,normal,setPreview,setHover,setNight};
+  return {scene,monitorSurface,screenWidth,screenHeight,center,normal,setPreview,setHover,setNight,updateWind,updateMonitor,pulseMonitor};
 }

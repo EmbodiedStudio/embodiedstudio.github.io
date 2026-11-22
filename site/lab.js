@@ -9,7 +9,7 @@ const video = panel.querySelector('video');
 const themeToggles = [...document.querySelectorAll('[data-theme-toggle]')];
 const themeMeta = document.querySelector('meta[name="theme-color"]');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-const sectionHashes = new Set(['#paper-title', '#abstract', '#method', '#gallery', '#execution', '#results']);
+const sectionHashes = new Set(document.documentElement.dataset.paperSections.split(' '));
 const THEME_KEY = 'embodiedstudio.homepage.night';
 
 let cameraControl = null;
@@ -182,7 +182,7 @@ function presentPaper(replaceUrl = true, focusTitle = false) {
   }
 }
 
-function openPaper() {
+function openPaper(uv) {
   if (!roomReady || !cameraControl || flying || document.body.classList.contains('paper-active')) return;
   preparePaper();
   if (reducedMotion.matches) {
@@ -192,6 +192,7 @@ function openPaper() {
   flying = true;
   document.body.classList.add('flying');
   cameraControl.setHover(false);
+  cameraControl.pulseMonitor(uv);
   cameraControl.approach(
     progress => {
       if (progress < .78) return;
@@ -240,7 +241,7 @@ window.addEventListener('hashchange', () => {
   if (!document.body.classList.contains('paper-active') && sectionHashes.has(location.hash)) presentPaper();
 });
 window.addEventListener('keydown', event => {
-  if ((event.key === 'Enter' || (event.key === ' ' && document.activeElement === canvas)) && !document.body.classList.contains('paper-active') && !flying) {
+  if (!event.repeat && (event.key === 'Enter' || (event.key === ' ' && document.activeElement === canvas)) && !document.body.classList.contains('paper-active') && !flying) {
     const tag = document.activeElement?.tagName;
     if (tag !== 'BUTTON' && tag !== 'A') { event.preventDefault(); openPaper(); }
   }
@@ -293,7 +294,9 @@ function loadPackedRoom() {
 async function initRoom() {
   if (cameraControl || roomStarting) return;
   roomStarting = true;
+  document.documentElement.classList.remove('paper-entry');
   lockRoom();
+  const introEnd = (performance.getEntriesByName('paper-opened').length ? performance.now() : 0) + 3000;
   try {
     const packed = loadPackedRoom();
     const [THREE, { buildHome }, resolveAsset] = await Promise.all([import('./vendor/three.module.js'), import('./room.js'), packed?.catch(() => undefined)]);
@@ -339,8 +342,7 @@ async function initRoom() {
         if (state === gl.WAIT_FAILED) { failed = true; failRoom(); return; }
         performance.mark('room-frame-complete');
         showProgress(1);
-        curtain.classList.add('reveal');
-        roomScreen.classList.add('room-revealing');
+        statusLine.textContent = tr('书房就绪', 'The study is ready');
         function showRoom() {
           if (current !== version || failed) return;
           curtain.hidden = roomPoster.hidden = true;
@@ -349,13 +351,23 @@ async function initRoom() {
           roomReady = true;
           document.body.classList.add('room-ready');
           performance.mark('room-interactive');
+          scheduleMotion();
         }
-        if (reducedMotion.matches) showRoom();
-        else setTimeout(showRoom,180);
+        const fade = reducedMotion.matches ? 0 : 180;
+        function revealRoom() {
+          if (current !== version || failed) return;
+          curtain.classList.add('reveal');
+          roomScreen.classList.add('room-revealing');
+          if (fade) setTimeout(showRoom,fade);
+          else showRoom();
+        }
+        const wait = fade ? Math.max(0,introEnd-performance.now()-fade) : 0;
+        if (wait) setTimeout(revealRoom,wait);
+        else revealRoom();
       }
       requestAnimationFrame(waitForFrame);
     }
-    const { scene, monitorSurface, screenWidth, screenHeight, center, normal, setPreview, setHover, setNight } =
+    const { scene, monitorSurface, screenWidth, screenHeight, center, normal, setPreview, setHover, setNight, updateWind, updateMonitor, pulseMonitor } =
       buildHome(previewUrl(), shadowChanged => {
         if (shadowChanged) renderer.shadowMap.needsUpdate = true;
         if ((roomReady || shadowChanged) && !queuedDraw) queuedDraw=requestAnimationFrame(() => {
@@ -381,21 +393,39 @@ async function initRoom() {
     const entryOrientation = new THREE.Quaternion();
     const motion = new THREE.Euler(0, 0, 0, 'YXZ');
     const ray = new THREE.Raycaster();
-    let pointer = null, yaw = 0, pitch = 0, animation = 0, hoveringScreen = false, roomVisible = true;
+    let pointer = null, yaw = 0, pitch = 0, hoveringScreen = false, roomVisible = true;
     let frameWidth = 1, frameHeight = 1, frameCenter = .5;
+    let motionFrame = 0, lastDraw = -Infinity, travel = null;
+    let windTime = 0;
 
-    function draw() {
-      if (!assetsReady || !roomVisible) return;
+    function draw(time = performance.now()) {
+      if (!assetsReady || !roomVisible || failed) return;
+      const animate = roomReady && !reducedMotion.matches;
+      windTime = animate ? windTime + Math.max(0, Math.min(time - lastDraw, 100)) / 1000 : 0;
+      updateWind(windTime);
+      updateMonitor(time, animate);
       renderer.render(scene, camera);
+      lastDraw = time;
+    }
+    function scheduleMotion() {
+      if (motionFrame || document.hidden || !roomVisible || !roomReady || failed || (reducedMotion.matches && !travel)) return;
+      motionFrame = requestAnimationFrame(tick);
+    }
+    function tick(time) {
+      motionFrame = 0;
+      if (document.hidden || !roomVisible || !roomReady || failed) return;
+      if (travel) travel(time);
+      else if (!reducedMotion.matches && time - lastDraw >= 32) draw(time);
+      scheduleMotion();
     }
     function entrance() {
       const phoneAspect = 390 / 844, desktopAspect = 1440 / 900;
       const wide = THREE.MathUtils.smoothstep(camera.aspect, phoneAspect, desktopAspect);
       const mix = (phone, landscape) => THREE.MathUtils.lerp(phone, landscape, wide);
-      const horizontalHalfSpan = mix(.478, desktopAspect * Math.tan(44.7 * Math.PI / 360));
+      const horizontalHalfSpan = mix(.445, desktopAspect * Math.tan(44.7 * Math.PI / 360));
       const viewAspect = Math.max(phoneAspect, Math.min(camera.aspect, desktopAspect));
       camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(horizontalHalfSpan / viewAspect));
-      deskShot.position.set(mix(.536, 0), mix(1.06, 1.052), mix(1.03, 1.60));
+      deskShot.position.set(mix(.553, 0), mix(1.06, 1.052), mix(1.03, 1.60));
       deskShot.rotation.set(0, 0, 0, 'YXZ');
       return { position: deskShot.position.clone(), orientation: deskShot.quaternion.clone(), frameCenter: mix(.461, .435) };
     }
@@ -437,62 +467,80 @@ async function initRoom() {
         draw();
       }
     }
-    function move(pose, duration, onProgress, onComplete) {
-      cancelAnimationFrame(animation);
+    function move(pose, duration, onProgress, onComplete, holdMs = 0) {
       const start = camera.position.clone(), rotation = camera.quaternion.clone();
       const startFrameCenter = frameCenter;
-      const begin = performance.now();
-      function frame(time) {
-        const fraction = Math.min(1, (time - begin) / duration);
+      const begin = performance.now() + holdMs;
+      travel = time => {
+        const fraction = reducedMotion.matches ? 1 : Math.max(0, Math.min(1, (time - begin) / duration));
         const eased = fraction < .5
           ? 4 * fraction * fraction * fraction
           : 1 - Math.pow(-2 * fraction + 2, 3) / 2;
         camera.position.copy(start).lerp(pose.position, eased);
         camera.quaternion.copy(rotation).slerp(pose.orientation, eased);
         setFraming(THREE.MathUtils.lerp(startFrameCenter, pose.frameCenter, eased));
-        draw();
+        draw(time);
         onProgress(fraction);
-        if (fraction < 1) animation = requestAnimationFrame(frame);
-        else {
-          animation = 0;
+        if (fraction === 1) {
+          travel = null;
           onComplete();
         }
-      }
-      animation = requestAnimationFrame(frame);
+      };
+      scheduleMotion();
     }
 
     function setActive(active) {
       roomVisible = active;
+      if (!active) {
+        cancelAnimationFrame(motionFrame);
+        motionFrame = 0;
+        travel = null;
+      }
       if (active && !roomReady) finishRoom();
-      else if (active) draw();
+      else if (active) {
+        draw();
+        scheduleMotion();
+      }
     }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        cancelAnimationFrame(motionFrame);
+        motionFrame = 0;
+      } else scheduleMotion();
+    });
+    reducedMotion.addEventListener('change', () => {
+      draw();
+      scheduleMotion();
+    });
 
     function monitorHit(event) {
       const box = canvas.getBoundingClientRect();
+      camera.updateMatrixWorld();
       ray.setFromCamera(
         new THREE.Vector2((event.clientX - box.left) * 2 / box.width - 1, 1 - (event.clientY - box.top) * 2 / box.height),
         camera
       );
-      return ray.intersectObject(monitorSurface, false).length > 0;
+      return ray.intersectObject(monitorSurface, false)[0]?.uv;
     }
     function updateHover(hit) {
       if (hit === hoveringScreen) return;
       hoveringScreen = hit;
       canvas.toggleAttribute('data-target', hit);
       setHover(hit);
-
     }
 
-
     canvas.addEventListener('pointerdown', event => {
-      if (!roomReady || event.button !== 0 || flying) return;
-      pointer = { id: event.pointerId, sx: event.clientX, sy: event.clientY, x: event.clientX, y: event.clientY, moved: false };
+      if (!roomReady || event.button !== 0 || flying || pointer) return;
+      const onMonitor = Boolean(monitorHit(event));
+      pointer = { id: event.pointerId, sx: event.clientX, sy: event.clientY, x: event.clientX, y: event.clientY, moved: false, onMonitor };
+      if (event.pointerType === 'touch') updateHover(onMonitor);
       canvas.setPointerCapture(event.pointerId);
     });
     canvas.addEventListener('pointermove', event => {
       if (flying) return;
       if (pointer?.id !== event.pointerId) {
-        updateHover(monitorHit(event));
+        if (!pointer && event.pointerType !== 'touch') updateHover(Boolean(monitorHit(event)));
         return;
       }
       if (!pointer.moved && Math.hypot(event.clientX - pointer.sx, event.clientY - pointer.sy) < 5) return;
@@ -503,26 +551,30 @@ async function initRoom() {
       pointer.x = event.clientX;
       pointer.y = event.clientY;
     });
-    function clearPointer() {
+    function clearPointer(event) {
+      if (pointer?.id !== event.pointerId) return;
       pointer = null;
       delete canvas.dataset.drag;
+      if (event.pointerType === 'touch') updateHover(false);
     }
     canvas.addEventListener('pointerup', event => {
       if (pointer?.id !== event.pointerId) return;
-      const clicked = !pointer.moved && monitorHit(event);
-      clearPointer();
-      if (clicked) openPaper();
+      const uv = !pointer.moved && pointer.onMonitor && monitorHit(event);
+      clearPointer(event);
+      if (uv) openPaper(uv);
     });
     canvas.addEventListener('pointercancel', clearPointer);
+    canvas.addEventListener('lostpointercapture', clearPointer);
     canvas.addEventListener('pointerleave', () => updateHover(false));
 
     cameraControl = {
       reset,
       setPreview,
-      setHover,
+      setHover: updateHover,
+      pulseMonitor,
       setNight,
       setActive,
-      approach: (progress, done) => move(fitMonitor(), 1020, progress, done),
+      approach: (progress, done) => move(fitMonitor(), 1020, progress, done, 110),
       retreat: done => {
         const entry = entrance();
         entryOrientation.copy(entry.orientation);

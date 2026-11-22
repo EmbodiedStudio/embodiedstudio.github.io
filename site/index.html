@@ -1,11 +1,17 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-paper-sections="#paper-title #abstract #method #gallery #execution #results">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f5f3ec">
   <meta name="description" content="EmbodiedStudio：面向具身学习与评测的任务驱动仿真生成平台。">
   <title>EmbodiedStudio — Task-Driven Simulation Generation Platform</title>
+  <script>
+    const paperSections = document.documentElement.dataset.paperSections.split(' ');
+    if (new URLSearchParams(location.search).get('view') === 'paper' || paperSections.includes(location.hash)) {
+      document.documentElement.classList.add('paper-entry');
+    }
+  </script>
   <link rel="modulepreload" href="./lab.js">
   <link rel="modulepreload" href="./locale.js">
   <link rel="stylesheet" href="./site.css">

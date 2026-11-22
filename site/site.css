@@ -293,6 +293,7 @@ body.paper-active .paper-page {
   overflow: visible;
   pointer-events: auto;
 }
+html.paper-entry .room-screen { display: none; }
 body.paper-active .room-screen { visibility: hidden; }
 
 .paper-width {
@@ -2268,9 +2269,10 @@ body.is-night .metric-bar { background: #4c4a45; }
 }
 .room-light-switch svg { width: 19px; height: 19px; }
 body.is-night .room-light-switch { color: #ffdfad; background: #302a27d9; border-color: #9b847c66; }
+body:not(.room-ready) .room-screen:not(.room-failed) .room-light-switch { visibility: hidden; }
 body.flying .room-light-switch { visibility: hidden; }
 
-/* Keep the preview visible until the fully textured room has reached the GPU. */
+/* Cover the opening until the textured room has reached the GPU. */
 .study-loading {
   position:absolute; inset:0; z-index:3; display:grid; place-items:center;
   background:radial-gradient(ellipse at 50% 46%, #fffdf6, #f1ede2 78%); color:#393d35;
@@ -2288,19 +2290,19 @@ body.is-night .study-loading { background:radial-gradient(ellipse at 50% 46%,#30
 .study-loading-actions { display:flex; justify-content:center; flex-wrap:wrap; gap:8px; }
 .study-loading-actions button { background:transparent; color:inherit; border:1px solid currentColor; border-radius:5px; padding:6px 14px; }
 #open-paper-fallback { background:var(--paper); color:var(--ink); border-color:transparent; }
-#room-poster:not([hidden]) ~ .study-loading {
+.room-failed #room-poster:not([hidden]) ~ .study-loading {
   background:none;
   place-items:end center;
   padding:0 16px max(18px,env(safe-area-inset-bottom));
 }
-#room-poster:not([hidden]) ~ .study-loading .study-loading-content {
+.room-failed #room-poster:not([hidden]) ~ .study-loading .study-loading-content {
   gap:6px;
   padding:8px 14px 10px;
   border-radius:var(--radius-md);
   background:#1b1915dc;
   color:#fffaf1;
 }
-#room-poster:not([hidden]) ~ .study-loading :is(svg,strong) { display:none; }
+.room-failed #room-poster:not([hidden]) ~ .study-loading :is(svg,strong) { display:none; }
 .room-failed .study-loading-track { display:none; }
 .room-failed .room-light-switch { z-index:4; }
 @media (prefers-reduced-motion:no-preference) {

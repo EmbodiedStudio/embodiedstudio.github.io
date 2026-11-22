@@ -1,7 +1,7 @@
 """Ray-trace the current Three.js room's diffuse occlusion, sun and desk-lamp visibility, and reflection probes.
 
 Serve site/ over HTTP and run with the existing Embree/Playwright environment:
-    python tools/bake-study.py http://127.0.0.1:8931/
+    python tools/bake-study.py http://127.0.0.1:8934/
 """
 
 import argparse
@@ -159,9 +159,9 @@ def bake(capture, output):
         ao_image = Image.fromarray((255 * light).astype('uint8')).filter(ImageFilter.GaussianBlur(.68))
         direct_image = Image.fromarray((255 * direct).astype('uint8')).filter(ImageFilter.GaussianBlur(.46))
         lamp = np.zeros(len(origin))
-        lamp_samples = 25
+        lamp_samples = 36
         for i in range(lamp_samples):
-            rho = .024 * np.sqrt((i + .5) / lamp_samples)
+            rho = .042 * np.sqrt((i + .5) / lamp_samples)
             angle = i * 2.39996323
             offset = rho * np.array([np.cos(angle), np.sin(angle) * .45, np.sin(angle)], np.float32)
             rays = lamp_center + offset - origin
