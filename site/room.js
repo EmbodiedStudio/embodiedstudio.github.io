@@ -667,8 +667,8 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   });
   const monitorSurface=add(new THREE.PlaneGeometry(screenWidth,screenHeight),display,0,0,.006,monitor);
   monitorSurface.castShadow=false;
-  // Extend just onto the dark bezel so the white rim also reads on a light page.
-  const rimMargin = .0055;
+  // Give the daylight halo room to fall off beyond the thin black bezel.
+  const rimMargin = .016;
   const monitorFeedback = new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
@@ -676,6 +676,7 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
     uniforms: {
       uvScale: { value: new THREE.Vector2(1 + 2*rimMargin/screenWidth, 1 + 2*rimMargin/screenHeight) },
       breath: { value: .5 },
+      daylight: { value: 1 },
       hoverAmount: { value: 0 },
       hoverUv: { value: new THREE.Vector2(.5, .5) },
       pressAge: { value: 1 },
@@ -692,6 +693,7 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
     fragmentShader: `
       uniform vec2 uvScale;
       uniform float breath;
+      uniform float daylight;
       uniform float hoverAmount;
       uniform vec2 hoverUv;
       uniform float pressAge;
@@ -704,22 +706,26 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
         vec2 uv = (screenUv - 0.5) * uvScale + 0.5;
         vec2 edges = min(uv, 1.0 - uv) * scale;
         float distanceToRim = min(edges.x, edges.y);
-        float outerFade = smoothstep(-0.014, -0.005, distanceToRim);
-        float core = 1.0 - smoothstep(0.002, 0.011, abs(distanceToRim));
-        float halo = exp(-abs(distanceToRim) / 0.016);
+        // The day highlight straddles the dark frame; its width grows with the breath.
+        float radius = abs(distanceToRim + mix(0.001, 0.009, daylight));
+        float width = mix(0.009, 0.014 + 0.014 * breath, daylight);
+        float core = 1.0 - smoothstep(0.002, width, radius);
+        float halo = 1.0 - smoothstep(0.003, mix(0.028, 0.054, daylight), radius);
+        float outerFade = smoothstep(-0.042, -0.026, distanceToRim);
         vec2 fromHover = (uv - hoverUv) * scale;
         float follow = exp(-5.0 * dot(fromHover, fromHover));
-        float strength = mix(0.12, 0.90, breath);
-        strength = mix(strength, 0.83 + 0.17 * follow, hoverAmount);
-        float glow = outerFade * strength * (0.78 * core + (0.19 + 0.19 * hoverAmount * follow) * halo);
+        float peak = mix(0.43, 1.0, daylight);
+        float strength = mix(0.09, peak, breath);
+        strength = mix(strength, peak * (0.88 + 0.12 * follow), hoverAmount);
+        float glow = outerFade * strength * (0.76 * core + 0.24 * halo);
         float distanceFromPress = length((uv - pressUv) * scale);
-        float radius = mix(0.014, 0.23, pressAge);
-        float ring = 1.0 - smoothstep(0.009, 0.026, abs(distanceFromPress - radius));
+        float pressRadius = mix(0.014, 0.23, pressAge);
+        float ring = 1.0 - smoothstep(0.009, 0.026, abs(distanceFromPress - pressRadius));
         float center = 1.0 - smoothstep(0.012, 0.041, distanceFromPress);
         float fade = (1.0 - pressAge) * (1.0 - pressAge);
         float pulse = min(1.0, (0.67 * ring + 0.62 * center) * fade);
 
-        gl_FragColor = vec4(vec3(1.0), min(1.0, glow + pulse));
+        gl_FragColor = vec4(vec3(1.0), min(1.0, glow + mix(0.68, 1.0, daylight) * pulse));
         #include <colorspace_fragment>
       }
     `
@@ -938,6 +944,7 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   }
   function setNight(enabled) {
     const night=Boolean(enabled);
+    monitorFeedback.uniforms.daylight.value = night ? 0 : 1;
     sunWindEnabled=!night;
     sunCanopyBend.value=night ? 0 : canopyBend;
     scene.background.setHex(night ? 0x191b24 : 0xb7a286);
