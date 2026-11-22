@@ -1,4 +1,4 @@
-"""Ray-trace the current Three.js room's diffuse occlusion, sun and desk-lamp visibility, and reflection probes.
+"""Ray-trace room occlusion, multiple sun-shadow phases, desk-lamp visibility, and reflection probes.
 
 Serve site/ over HTTP and run with the existing Embree/Playwright environment:
     python tools/bake-study.py http://127.0.0.1:8934/
@@ -35,15 +35,20 @@ CAPTURE = '''async includeReflections => {
     worktop:[0,1,0,384,192,.43], rug:[0,1,0,256,224,.95], 'desk-felt':[0,1,0,256,128,.18]
   };
   const receivers = home.scene.userData.bakeReceivers ?? defaultReceivers;
+  const windReceivers = new Set(home.scene.userData.sunWindReceivers);
+  const canopy = home.scene.getObjectByName('wind-shadow-canopy');
+  if (!canopy) throw new Error('Missing wind-shadow canopy');
+  const canopyMeshes = new Set();
+  canopy.traverse(node=>{ if (node.isMesh) canopyMeshes.add(node); });
   const triangles = [], surfaces = {};
   const local = new T.Matrix4(), world = new T.Matrix4(), normalMatrix = new T.Matrix3();
   const normal = new T.Vector3(), point = new T.Vector3();
-  home.scene.traverse(mesh => {
+  function captureMesh(mesh, target, face) {
     if (!mesh.isMesh || !mesh.visible || mesh.userData.skipBake) return;
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     if (materials.every(material => material.transparent || material.isMeshBasicMaterial)) return;
     const geometry = mesh.geometry, positions = geometry.attributes.position;
-    const indexed = geometry.index, face = receivers[mesh.name];
+    const indexed = geometry.index;
     const direction = face && new T.Vector3(...face.slice(0,3));
     const uv = geometry.attributes.uv1 ?? geometry.attributes.uv;
     const corners = new Map();
@@ -60,24 +65,41 @@ CAPTURE = '''async includeReflections => {
         if ((u===0 || u===1) && (v===0 || v===1)) corners.set(`${u},${v}`,position);
       }
       for (let i = 0; i < (indexed?.count ?? positions.count); i++) {
-        triangles.push(...transformed[indexed ? indexed.getX(i) : i]);
+        target.push(...transformed[indexed ? indexed.getX(i) : i]);
       }
     }
     if (face) {
       const basis = mesh.userData.bakeCorners?.map(corner => point.fromArray(corner).applyMatrix4(mesh.matrixWorld).toArray())
         ?? ['0,0','1,0','0,1'].map(corner => corners.get(corner));
       if (!basis.every(Boolean)) throw new Error(`Missing planar UV corners for ${mesh.name}`);
-      surfaces[mesh.name] = { basis, direction: direction.toArray(), size: face.slice(3,5), radius: face[5] };
+      surfaces[mesh.name] = { basis, direction: direction.toArray(), size: face.slice(3,5), radius: face[5],
+        wind: windReceivers.has(mesh.name) };
     }
+  }
+  home.scene.traverse(mesh => {
+    if (!canopyMeshes.has(mesh)) captureMesh(mesh,triangles,receivers[mesh.name]);
   });
   for (const name of Object.keys(receivers)) if (!surfaces[name]) throw new Error(`Missing occlusion receiver: ${name}`);
   const sun = home.scene.getObjectByName('windowSun');
   const sunDirection = sun?.getWorldPosition(point).sub(sun.target.getWorldPosition(normal)).normalize().toArray();
   const lampPosition=home.scene.getObjectByName('deskLampBounce').getWorldPosition(point).toArray();
-  const bytes = new Uint8Array(Float32Array.from(triangles).buffer);
-  let packed = '';
-  for (let i = 0; i < bytes.length; i += 16384) packed += String.fromCharCode(...bytes.subarray(i,i+16384));
-  if (!includeReflections) return { triangles: btoa(packed), surfaces, sunDirection, lampPosition, reflections: [] };
+  function pack(vertices) {
+    const bytes = new Uint8Array(Float32Array.from(vertices).buffer);
+    let packed = '';
+    for (let i = 0; i < bytes.length; i += 16384) packed += String.fromCharCode(...bytes.subarray(i,i+16384));
+    return btoa(packed);
+  }
+  const foliage = [-1,0,1].map(bend=>{
+    home.setCanopyBend(bend);
+    home.scene.updateMatrixWorld(true);
+    const vertices=[];
+    for (const mesh of canopyMeshes) captureMesh(mesh,vertices);
+    return pack(vertices);
+  });
+  home.setCanopyBend(0);
+  home.scene.updateMatrixWorld(true);
+  const geometry={ triangles:pack(triangles), foliage, surfaces, sunDirection, lampPosition };
+  if (!includeReflections) return { ...geometry, reflections: [] };
 
   home.monitorSurface.visible = false;
   const renderer = new T.WebGLRenderer({ antialias:false, preserveDrawingBuffer:true });
@@ -110,14 +132,44 @@ CAPTURE = '''async includeReflections => {
   }
   cube.dispose();
   renderer.dispose();
-  return { triangles:btoa(packed), surfaces, sunDirection, lampPosition, reflections };
+  return { ...geometry, reflections };
 }'''
 
 
+def unpack_triangles(data):
+    return np.frombuffer(base64.b64decode(data), dtype=np.float32).reshape(-1, 3, 3)
+
+
+def sun_visibility(origin, direction, sun_tangent, sun_bitangent, scene, samples, canopy_phases=()):
+    opening = np.zeros(len(origin))
+    transmitted = np.zeros((len(canopy_phases), len(origin)))
+    for i in range(samples):
+        radius = .009 * np.sqrt((i + .5) / samples)
+        angle = i * 2.39996323
+        ray = direction + radius * (np.cos(angle) * sun_tangent + np.sin(angle) * sun_bitangent)
+        rays = np.broadcast_to(ray.astype('f4'), origin.shape).copy()
+        open_indices = np.flatnonzero(scene.run(origin, rays, query='DISTANCE') > 80)
+        opening[open_indices] += 1
+        if open_indices.size and canopy_phases:
+            open_origins, open_rays = origin[open_indices], rays[open_indices]
+            for phase, canopy in enumerate(canopy_phases):
+                transmitted[phase, open_indices] += canopy.run(open_origins, open_rays, query='DISTANCE') > 80
+    return opening / samples, transmitted / samples
+
+
+def sun_image(visibility, width, height):
+    pixels = (255 * visibility.reshape(height, width)).astype('uint8')
+    return Image.fromarray(pixels).filter(ImageFilter.GaussianBlur(.46))
+
+
 def bake(capture, output):
-    triangles = np.frombuffer(base64.b64decode(capture['triangles']), dtype=np.float32).reshape(-1, 3, 3)
+    triangles = unpack_triangles(capture['triangles'])
+    foliage = [unpack_triangles(phase) for phase in capture['foliage']]
     scene = EmbreeScene()
-    mesh = TriangleMesh(scene, triangles)
+    fixed_scene = EmbreeScene()
+    canopy_phases = [EmbreeScene() for _ in foliage]
+    meshes = [TriangleMesh(scene, triangles), TriangleMesh(scene, foliage[1]), TriangleMesh(fixed_scene, triangles)]
+    meshes += [TriangleMesh(phase, vertices) for phase, vertices in zip(canopy_phases, foliage)]
     rng = np.random.default_rng(34)
     lamp_center = np.asarray(capture['lampPosition'], np.float32)
     sun_dir = np.asarray(capture.get('sunDirection', [0, 1, 0]), np.float32)
@@ -146,18 +198,25 @@ def bake(capture, output):
             hit = scene.run(origin, direction, query='DISTANCE')
             occlusion += np.where((hit >= 0) & (hit < radius * 8), np.exp(-np.maximum(hit, 0) / radius), 0)
         light = np.clip(1 - .93 * occlusion.reshape(height, width) / samples, .15, 1)
-        direct = np.zeros(len(origin))
+        opening = np.zeros(len(origin))
+        phases = canopy_phases if surface['wind'] else ()
+        transmitted = np.zeros((len(phases), len(origin)))
         if np.dot(normal, sun_dir) > 0:
-            for i in range(samples):
-                radius = .009 * np.sqrt((i + .5) / samples)
-                angle = i * 2.39996323
-                direction = sun_dir + radius * (np.cos(angle) * sun_tangent + np.sin(angle) * sun_bitangent)
-                direction = np.broadcast_to(direction.astype('f4'), origin.shape).copy()
-                hit = scene.run(origin, direction, query='DISTANCE')
-                direct += (hit > 80)
-        direct = direct.reshape(height, width) / samples
+            opening, transmitted = sun_visibility(
+                origin, sun_dir, sun_tangent, sun_bitangent, fixed_scene if phases else scene, samples, phases
+            )
         ao_image = Image.fromarray((255 * light).astype('uint8')).filter(ImageFilter.GaussianBlur(.68))
-        direct_image = Image.fromarray((255 * direct).astype('uint8')).filter(ImageFilter.GaussianBlur(.46))
+        direct_image = sun_image(opening, width, height)
+        if phases:
+            # Each wind channel describes foliage only, conditioned on sun rays that clear fixed geometry.
+            # Fixed shade remains identically zero before, during and after every crossfade.
+            fixed = np.asarray(direct_image, dtype=np.float32)
+            channels = []
+            for transmitted_phase in transmitted:
+                visible = np.asarray(sun_image(transmitted_phase, width, height), dtype=np.float32)
+                conditional = np.divide(255 * visible, fixed, out=np.full_like(fixed, 255), where=fixed > 0)
+                channels.append(Image.fromarray(np.clip(np.rint(conditional), 0, 255).astype('uint8')))
+            Image.merge('RGB', tuple(channels)).save(output / f'sun-wind-{name}.webp', lossless=True, method=6)
         lamp = np.zeros(len(origin))
         lamp_samples = 36
         for i in range(lamp_samples):
@@ -174,12 +233,13 @@ def bake(capture, output):
         Image.merge('RGB', (ao_image, direct_image, lamp_image)).save(
             output / f'ao-{name}.webp', lossless=True, method=6
         )
-        print(f'{name}: mean indirect visibility {light.mean():.3f}, open sun fraction {direct.mean():.3f}, mean lamp visibility {lamp.mean()/lamp_samples:.3f}', flush=True)
+        light_fraction = transmitted[1].mean() if phases else opening.mean()
+        print(f'{name}: mean indirect visibility {light.mean():.3f}, open sun fraction {light_fraction:.3f}, mean lamp visibility {lamp.mean()/lamp_samples:.3f}', flush=True)
     for mode, data in zip(('day', 'night'), capture['reflections']):
         with Image.open(io.BytesIO(base64.b64decode(data))) as image:
             image.convert('RGB').save(output / f'reflection-{mode}.webp', quality=88, method=6)
         print(f'{mode}: captured room reflection', flush=True)
-    del mesh
+    del meshes
 
 
 def main():

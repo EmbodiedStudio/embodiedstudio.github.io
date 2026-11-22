@@ -20,6 +20,26 @@ function useBakedLighting(shader) {
   shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_begin>',bakedDirectLighting);
 }
 
+const sunWindAssets = {
+  floor: './media/study/sun-wind-floor.webp',
+  'back-wall': './media/study/sun-wind-back-wall.webp',
+  rug: './media/study/sun-wind-rug.webp',
+  worktop: './media/study/sun-wind-worktop.webp'
+};
+const windSunLighting = bakedDirectLighting.replace(
+  'directLight.color *= texture2D( aoMap, vAoMapUv ).g;',
+  `vec3 canopy = texture2D( sunWindMap, vAoMapUv ).rgb;
+    float movingShade = mix(canopy.g, sunCanopyBend < 0.0 ? canopy.r : canopy.b, abs(sunCanopyBend));
+    directLight.color *= texture2D( aoMap, vAoMapUv ).g * movingShade;`
+);
+function useWindBakedLighting(shader, phaseMap, bend) {
+  shader.uniforms.sunWindMap = { value: phaseMap };
+  shader.uniforms.sunCanopyBend = bend;
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\nuniform sampler2D sunWindMap;\nuniform float sunCanopyBend;')
+    .replace('#include <lights_fragment_begin>',windSunLighting);
+}
+
 const material = (color, roughness = .7, metalness = 0) =>
   new THREE.MeshStandardMaterial({ color, roughness, metalness });
 
@@ -140,6 +160,8 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   scene.background = new THREE.Color(0xb7a286);
   const lighting = !lifecycle.skipBakedLighting;
   const leafPhase = { value: 0 }, leafBreeze = { value: 0 };
+  const sunCanopyBend={ value: 0 };
+  let sunWindEnabled=true, canopyBend=0;
 
   function flexibleLeaves(mesh) {
     mesh.material.onBeforeCompile = shader => {
@@ -376,7 +398,15 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
     const edge=.75+.27*Math.cos(angle*3+index);
     outdoorLeaves.push(vec(-2.56+.084*Math.sin(angle+index),y+r*Math.sin(angle)*edge,z+r*Math.cos(angle)*edge));
   }
-  scene.add(taperedSegments(outdoorStems,material(0x61523b,.90),7),plantLeaves(outdoorLeaves,1.95));
+  // The tree root stays fixed. Only this rooted exterior canopy bakes into the moving shadow layer.
+  const shadowCanopy=group(-2.67,.02,1.44);
+  shadowCanopy.name='wind-shadow-canopy';
+  function canopyMesh(mesh) {
+    mesh.position.copy(shadowCanopy.position).negate();
+    shadowCanopy.add(mesh);
+  }
+  canopyMesh(taperedSegments(outdoorStems,material(0x61523b,.90),7));
+  canopyMesh(plantLeaves(outdoorLeaves,1.95));
   // Dense sprays overlap at the aperture, while the gaps in between transmit smaller islands of sun.
   const canopySprays=[
     [3.135,.139,3.202,.378,72], [2.955,.128,3.107,.440,46], [2.799,.104,2.946,.371,72],
@@ -398,7 +428,8 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
       sprayLeaves.push(point);
     }
   }
-  scene.add(taperedSegments(sprayStems,material(0x61523b,.90),8),plantLeaves(sprayLeaves,2.46,true));
+  canopyMesh(taperedSegments(sprayStems,material(0x61523b,.90),8));
+  canopyMesh(plantLeaves(sprayLeaves,2.46,true));
   // The desk keeps the rounded upright by the writing area and the open trestle below the screen side.
   const deskY=.742, deskZ=-1.115, slabHeight=.036, slabWidth=2.73, slabDepth=.69, lip=.006;
   const slab=new THREE.ExtrudeGeometry(roundRect(slabWidth-2*lip,slabDepth-2*lip,.054),{
@@ -521,6 +552,8 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   deskBeam.position.set(0,-.007,0);
   deskBeam.target.position.set(-.16,-.264,.142);
   deskBeam.castShadow=true;
+  deskBeam.shadow.autoUpdate=false;
+  deskBeam.shadow.needsUpdate=true;
   deskBeam.shadow.mapSize.set(512,512);
   deskBeam.shadow.camera.near=.028;
   deskBeam.shadow.normalBias=.0018;
@@ -634,12 +667,17 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   });
   const monitorSurface=add(new THREE.PlaneGeometry(screenWidth,screenHeight),display,0,0,.006,monitor);
   monitorSurface.castShadow=false;
+  // Extend just onto the dark bezel so the white rim also reads on a light page.
+  const rimMargin = .0055;
   const monitorFeedback = new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
     toneMapped: false,
     uniforms: {
-      hintStrength: { value: .24 },
+      uvScale: { value: new THREE.Vector2(1 + 2*rimMargin/screenWidth, 1 + 2*rimMargin/screenHeight) },
+      breath: { value: .5 },
+      hoverAmount: { value: 0 },
+      hoverUv: { value: new THREE.Vector2(.5, .5) },
       pressAge: { value: 1 },
       pressUv: { value: new THREE.Vector2(.5, .5) },
       screenAspect: { value: screenWidth / screenHeight }
@@ -652,7 +690,10 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
       }
     `,
     fragmentShader: `
-      uniform float hintStrength;
+      uniform vec2 uvScale;
+      uniform float breath;
+      uniform float hoverAmount;
+      uniform vec2 hoverUv;
       uniform float pressAge;
       uniform vec2 pressUv;
       uniform float screenAspect;
@@ -660,32 +701,45 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
 
       void main() {
         vec2 scale = vec2(screenAspect, 1.0);
-        vec2 edge = min(screenUv, 1.0 - screenUv) * scale;
-        float rim = 1.0 - smoothstep(0.007, 0.027, min(edge.x, edge.y));
-        float cue = hintStrength * (0.20 + 0.80 * rim);
-
-        float distanceFromPress = length((screenUv - pressUv) * scale);
+        vec2 uv = (screenUv - 0.5) * uvScale + 0.5;
+        vec2 edges = min(uv, 1.0 - uv) * scale;
+        float distanceToRim = min(edges.x, edges.y);
+        float outerFade = smoothstep(-0.014, -0.005, distanceToRim);
+        float core = 1.0 - smoothstep(0.002, 0.011, abs(distanceToRim));
+        float halo = exp(-abs(distanceToRim) / 0.016);
+        vec2 fromHover = (uv - hoverUv) * scale;
+        float follow = exp(-5.0 * dot(fromHover, fromHover));
+        float strength = mix(0.12, 0.90, breath);
+        strength = mix(strength, 0.83 + 0.17 * follow, hoverAmount);
+        float glow = outerFade * strength * (0.78 * core + (0.19 + 0.19 * hoverAmount * follow) * halo);
+        float distanceFromPress = length((uv - pressUv) * scale);
         float radius = mix(0.014, 0.23, pressAge);
         float ring = 1.0 - smoothstep(0.009, 0.026, abs(distanceFromPress - radius));
         float center = 1.0 - smoothstep(0.012, 0.041, distanceFromPress);
         float fade = (1.0 - pressAge) * (1.0 - pressAge);
         float pulse = min(1.0, (0.67 * ring + 0.62 * center) * fade);
-        vec3 color = mix(vec3(0.92, 0.57, 0.24), vec3(1.0, 0.80, 0.41), pulse);
-        gl_FragColor = vec4(color, min(0.92, cue + pulse));
+
+        gl_FragColor = vec4(vec3(1.0), min(1.0, glow + pulse));
         #include <colorspace_fragment>
       }
     `
   });
-  const hint = add(monitorSurface.geometry,monitorFeedback,0,0,.007,monitor);
+  const hint = add(new THREE.PlaneGeometry(screenWidth+2*rimMargin,screenHeight+2*rimMargin),monitorFeedback,0,0,.007,monitor);
   hint.castShadow=hint.receiveShadow=false;
 
-  let hoveringMonitor = false, pressedAt = -Infinity;
+  const hoverTarget = new THREE.Vector2(.5,.5);
+  let hoveringMonitor = false, pressedAt = -Infinity, lastMonitorUpdate = performance.now();
   function updateMonitor(time, motionEnabled) {
-    const breath = motionEnabled ? .5 - .5 * Math.cos(time * (2 * Math.PI / 5000)) : .38;
-    monitorFeedback.uniforms.hintStrength.value = hoveringMonitor ? .70 : .14 + .27 * breath;
-    monitorFeedback.uniforms.pressAge.value = motionEnabled
-      ? THREE.MathUtils.clamp((time - pressedAt) / 460, 0, 1)
-      : 1;
+    const uniforms = monitorFeedback.uniforms;
+    const elapsed = THREE.MathUtils.clamp(time - lastMonitorUpdate, 0, 100);
+    const easing = motionEnabled ? 1 - Math.exp(-elapsed / 95) : 1;
+    const pressTime = time - pressedAt;
+    lastMonitorUpdate = time;
+    uniforms.breath.value = motionEnabled ? .5 - .5 * Math.cos(time * (2 * Math.PI / 4400)) : .5;
+    uniforms.hoverAmount.value = THREE.MathUtils.lerp(uniforms.hoverAmount.value, Number(hoveringMonitor), easing);
+    if (motionEnabled) uniforms.hoverUv.value.lerp(hoverTarget,easing);
+    else uniforms.hoverUv.value.set(.5,.5);
+    uniforms.pressAge.value = motionEnabled ? THREE.MathUtils.clamp(pressTime / 460,0,1) : 1;
   }
   function pulseMonitor(uv) {
     if (uv) monitorFeedback.uniforms.pressUv.value.copy(uv);
@@ -831,6 +885,9 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
   sun.position.set(-4.52,3.75,2.18);
   sun.target.position.set(.22,.52,-1.25);
   sun.castShadow=true;
+  // Keep the live map at the rest pose. Wind shades the baked receivers separately.
+  sun.shadow.autoUpdate=false;
+  sun.shadow.needsUpdate=true;
   sun.shadow.mapSize.set(1792,1792);
   sun.shadow.normalBias=.003;
   sun.shadow.bias=-.00011;
@@ -851,6 +908,7 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
     floor:[0,1,0,352,416,1.18], 'back-wall':[0,0,1,384,270,1.08],
     'right-wall':[-1,0,0,352,245,1.15], 'left-wall':[1,0,0,304,128,1.05], ceiling:[0,-1,0,256,244,1.43], worktop:[0,1,0,448,130,.42], rug:[0,1,0,348,248,.76]
   };
+  scene.userData.sunWindReceivers=Object.keys(sunWindAssets);
   if (lighting) {
     for (const [surface, url] of [[floor,'./media/study/ao-floor.webp'],[backWall,'./media/study/ao-back-wall.webp'],
       [rightWall,'./media/study/ao-right-wall.webp'],[leftWall,'./media/study/ao-left-wall.webp'],[ceiling,'./media/study/ao-ceiling.webp'],[deskTop,'./media/study/ao-worktop.webp'],[rug,'./media/study/ao-rug.webp']]) {
@@ -859,37 +917,68 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
       ao.channel=1;
       surface.material.aoMap=ao;
       surface.material.aoMapIntensity=.92;
-      surface.material.onBeforeCompile=useBakedLighting;
+      const windAsset=sunWindAssets[surface.name];
+      if (windAsset) {
+        const phaseMap=surfaceMap(windAsset,false);
+        phaseMap.wrapS=phaseMap.wrapT=THREE.ClampToEdgeWrapping;
+        surface.material.onBeforeCompile=shader=>useWindBakedLighting(shader,phaseMap,sunCanopyBend);
+      } else surface.material.onBeforeCompile=useBakedLighting;
     }
   }
 
-  function setHover(active) {
+  function setHover(uv) {
+    const active = Boolean(uv);
+    if (active) {
+      hoverTarget.copy(uv);
+      if (monitorFeedback.uniforms.hoverAmount.value < .01) monitorFeedback.uniforms.hoverUv.value.copy(uv);
+    }
     if (active === hoveringMonitor) return;
     hoveringMonitor = active;
     onUpdate();
   }
   function setNight(enabled) {
     const night=Boolean(enabled);
+    sunWindEnabled=!night;
+    sunCanopyBend.value=night ? 0 : canopyBend;
     scene.background.setHex(night ? 0x191b24 : 0xb7a286);
     scene.environment=night ? nightReflection : dayReflection;
-    scene.environmentIntensity=night ? .62 : .72;
+    scene.environmentIntensity=night ? .58 : .72;
     sun.color.setHex(night ? 0xa8c4ff : 0xffe5be);
     sun.intensity=night ? .044 : 4.28;
     fill.color.setHex(night ? 0xa7b9d8 : 0xf6f3ed);
     fill.groundColor.setHex(night ? 0x836a5a : 0xd9bfa4);
-    fill.intensity=night ? .62 : .98;
-    windowBounce.intensity=night ? .40 : .56;
-    frontBounce.intensity=night ? .28 : .42;
-    writingBounce.intensity=night ? 0 : .91;
+    fill.intensity=night ? .59 : .98;
+    windowBounce.color.setHex(night ? 0xa5bfdf : 0xeef4ff);
+    windowBounce.intensity=night ? .37 : .56;
+    frontBounce.intensity=night ? .23 : .42;
+    // The short, warm bounce reaches the upholstered chair and the adjacent desk edge.
+    writingBounce.color.setHex(night ? 0xffdeb7 : 0xffeed9);
+    writingBounce.position.set(...(night ? [-.75,.87,-.39] : [-1.71,1.19,-.49]));
+    writingBounce.target.position.set(...(night ? [-.26,.57,-.74] : [-1.03,.44,-1.02]));
+    writingBounce.distance=night ? .89 : 2.9;
+    writingBounce.angle=night ? .66 : Math.PI/2.7;
+    writingBounce.intensity=night ? .24 : .91;
     blindFinish.emissiveIntensity=night ? .02 : .43;
-    deskGlow.intensity=night ? .57 : .045;
-    deskBeam.intensity=night ? 3.45 : .49;
-    diffuser.emissiveIntensity=night ? 1.85 : .53;
-    display.emissiveIntensity=night ? .58 : .84;
+    deskGlow.intensity=night ? .38 : .045;
+    const beamAngle=night ? Math.PI/4.9 : Math.PI/3.25;
+    const movedLamp=deskBeam.angle!==beamAngle;
+    deskBeam.target.position.set(...(night ? [-.17,-.373,.293] : [-.16,-.264,.142]));
+    deskBeam.angle=beamAngle;
+    if (movedLamp) deskBeam.shadow.needsUpdate=true;
+    deskBeam.intensity=night ? 2.78 : .49;
+    diffuser.emissiveIntensity=night ? 1.50 : .53;
+    display.emissive.setHex(night ? 0xf7faff : 0xfff5e5);
+    display.emissiveIntensity=night ? .68 : .84;
     viewMaterial.map=night ? nightSky : daySky;
-    viewMaterial.color.setScalar(night ? .55 : 1.03);
-    glass.material.opacity=night ? .15 : .07;
-    onUpdate();
+    if (night) viewMaterial.color.setRGB(.46,.52,.84);
+    else viewMaterial.color.setScalar(1.03);
+    glass.material.opacity=night ? .10 : .07;
+    onUpdate(movedLamp);
+  }
+  function setCanopyBend(amount) {
+    canopyBend=amount;
+    shadowCanopy.rotation.set(.022*amount,.035*amount,-.043*amount);
+    sunCanopyBend.value=sunWindEnabled ? amount : 0;
   }
   let previousWindPhase=0;
   function updateWind(timeSeconds) {
@@ -900,24 +989,25 @@ export function buildHome(previewUrl, onUpdate, lifecycle = {}) {
     const easing=.65*Math.sin(phase)+.24*Math.sin(3*phase)+.11*Math.sin(5*phase);
     const ripple=Math.sin(8*phase)*(.47+.32*Math.sin(phase));
     leafPhase.value=phase*8;
-    leafBreeze.value=.0047*(.56*easing+.44*ripple);
+    leafBreeze.value=.0064*(.56*easing+.44*ripple);
+    setCanopyBend(THREE.MathUtils.clamp(1.43*easing,-1,1));
     for(let i=0;i<shadePositions.count;i++) {
       const offset=i*3, x=shadeRest[offset], drop=shadeDrop[i];
       shadePositions.setXYZ(i,x+drop*.013*easing,shadeRest[offset+1]+drop*.007*easing**2,
-        shadeRest[offset+2]+drop*(.034*easing+.010*ripple*Math.cos(x*9)));
+        shadeRest[offset+2]+drop*(.044*easing+.010*ripple*Math.cos(x*9)));
     }
     shadePositions.needsUpdate=true;
     blind.computeVertexNormals();
-    romanEdge.position.set(windowX+.013*easing,1.833+.007*easing**2,rearZ+.04+.034*easing);
+    romanEdge.position.set(windowX+.013*easing,1.833+.007*easing**2,rearZ+.04+.044*easing);
     romanEdge.rotation.y=.014*ripple;
-    deskBranches.rotation.set(.029*easing+.012*ripple,0,-.075*easing);
-    hangingVines.rotation.set(.040*easing-.020*ripple,.020*easing,.089*easing);
-    nearWindow.rotation.set(.031*easing,.068*easing,.069*easing+.024*ripple);
+    deskBranches.rotation.set(.067*easing+.026*ripple,.034*easing,-.168*easing);
+    hangingVines.rotation.set(.052*easing-.023*ripple,.027*easing,.106*easing);
+    nearWindow.rotation.set(.049*easing,.086*easing,.092*easing+.029*ripple);
   }
 
   setNight(false);
   scene.updateMatrixWorld(true);
   const center=monitorSurface.getWorldPosition(new THREE.Vector3());
   const normal=new THREE.Vector3(0,0,1).applyQuaternion(monitor.getWorldQuaternion(new THREE.Quaternion()));
-  return {scene,monitorSurface,screenWidth,screenHeight,center,normal,setPreview,setHover,setNight,updateWind,updateMonitor,pulseMonitor};
+  return {scene,monitorSurface,screenWidth,screenHeight,center,normal,setPreview,setHover,setNight,updateWind,updateMonitor,pulseMonitor,setCanopyBend};
 }

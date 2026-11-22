@@ -524,24 +524,26 @@ async function initRoom() {
       );
       return ray.intersectObject(monitorSurface, false)[0]?.uv;
     }
-    function updateHover(hit) {
-      if (hit === hoveringScreen) return;
-      hoveringScreen = hit;
-      canvas.toggleAttribute('data-target', hit);
-      setHover(hit);
+    function updateHover(uv) {
+      const active = Boolean(uv);
+      if (active !== hoveringScreen) {
+        hoveringScreen = active;
+        canvas.toggleAttribute('data-target', active);
+      }
+      setHover(uv);
     }
 
     canvas.addEventListener('pointerdown', event => {
       if (!roomReady || event.button !== 0 || flying || pointer) return;
-      const onMonitor = Boolean(monitorHit(event));
-      pointer = { id: event.pointerId, sx: event.clientX, sy: event.clientY, x: event.clientX, y: event.clientY, moved: false, onMonitor };
-      if (event.pointerType === 'touch') updateHover(onMonitor);
+      const uv = monitorHit(event);
+      pointer = { id: event.pointerId, sx: event.clientX, sy: event.clientY, x: event.clientX, y: event.clientY, moved: false, onMonitor: Boolean(uv) };
+      if (event.pointerType === 'touch') updateHover(uv);
       canvas.setPointerCapture(event.pointerId);
     });
     canvas.addEventListener('pointermove', event => {
       if (flying) return;
       if (pointer?.id !== event.pointerId) {
-        if (!pointer && event.pointerType !== 'touch') updateHover(Boolean(monitorHit(event)));
+        if (!pointer && event.pointerType !== 'touch') updateHover(monitorHit(event));
         return;
       }
       if (!pointer.moved && Math.hypot(event.clientX - pointer.sx, event.clientY - pointer.sy) < 5) return;

@@ -36,5 +36,7 @@ redistribution license for that supplied image and its derivatives is unspecifie
 The plaster albedo is derived from the credited Poly Haven clay plaster.
 tools/weave-rug.py generates the repeating jute material.
 The RGB lighting textures record indirect occlusion, window sun and desk-lamp
-visibility, respectively. They and both room reflections are regenerated with
-this layout by tools/bake-study.py.
+visibility, respectively. The four sun-wind maps store canopy transmission
+at three bend angles, sampled against the same fixed window and furniture.
+These lighting maps and both room reflections are generated from this layout
+by tools/bake-study.py.
