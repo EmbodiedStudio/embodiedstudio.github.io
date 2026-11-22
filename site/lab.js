@@ -24,6 +24,7 @@ document.getElementById('open-paper-fallback').addEventListener('click', () => p
 posterPortrait.addEventListener('change', updateRoomPoster);
 
 function updateRoomPoster() {
+  if (!roomScreen.classList.contains('room-failed')) return;
   if (roomReady || roomScreen.classList.contains('room-revealing') || document.body.classList.contains('paper-active')) return;
   const theme = isNight ? 'night' : 'day';
   const format = posterPortrait.matches ? 'Phone' : 'Desktop';
@@ -52,8 +53,8 @@ function lockRoom() {
   updateRoomPoster();
 }
 function failRoom() {
-  lockRoom();
   roomScreen.classList.add('room-failed');
+  lockRoom();
   statusLine.textContent = tr('书房资源未能完整载入', 'The study could not finish loading');
   recovery.hidden = false;
 }
