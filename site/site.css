@@ -481,6 +481,31 @@ body.paper-active .room-screen { visibility: hidden; }
   line-height: 1.38;
   color: var(--ink-soft);
 }
+.paper-authors,
+.paper-affiliation {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+}
+.paper-authors {
+  gap: 4px 18px;
+  margin: 16px auto 0;
+  font-weight: 550;
+}
+.paper-authors a {
+  color: var(--ink);
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: .22em;
+}
+.paper-authors a:hover { color: var(--primary); }
+.paper-authors small { margin-inline-start: .3em; color: var(--muted); font-weight: 400; }
+.paper-affiliation {
+  gap: 3px 12px;
+  margin: 5px auto 0;
+  color: var(--muted);
+  font-size: .85rem;
+}
 .paper-intro {
   max-width: 62ch;
   margin: 12px auto 0;
