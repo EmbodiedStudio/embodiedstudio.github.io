@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" data-paper-sections="#paper-title #abstract #walkthrough #method #gallery #execution #appendix-rollouts #results">
+<html lang="zh-CN" data-paper-sections="#paper-title #walkthrough #abstract #method #results #gallery #execution">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -53,8 +53,8 @@
           <span>EmbodiedStudio</span>
         </a>
         <nav aria-label="页面导航" data-aria-en="Sections">
-          <a href="#abstract" data-en="Overview">概览</a>
           <a href="#walkthrough" data-en="Video">讲解</a>
+          <a href="#abstract" data-en="Overview">概览</a>
           <a href="#method" data-en="Method">方法</a>
           <a href="#results" data-en="Results">结果</a>
           <a href="#gallery" data-en="Scenes">场景</a>
@@ -127,32 +127,66 @@
       </figure>
     </section>
 
-    <section id="abstract" class="paper-section paper-width">
-      <header class="section-heading">
-        <h2 data-en="Overview">概览</h2>
-      </header>
-      <div class="abstract-card">
-        <p id="manuscript-abstract" class="paper-copy" lang="zh-CN"></p>
-      </div>
-    </section>
-
     <section id="walkthrough" class="paper-section paper-width">
       <header class="section-heading">
-        <h2 data-en="Project Walkthrough">项目讲解</h2>
+        <div>
+          <span class="section-eyebrow" data-en="WALKTHROUGH">项目讲解</span>
+          <h2 data-en="Project Walkthrough">全流程项目讲解</h2>
+        </div>
+        <span class="source-note" data-en="2:59 narrated tour · English captions included">2:59 全程配音导览 · 含英文字幕与章节跳转</span>
       </header>
       <figure class="video-stage walkthrough-stage">
-        <video controls playsinline preload="none"
+        <video id="walkthrough-video" controls playsinline preload="none"
           data-paper-video="./media/appendix/embodiedstudio-walkthrough.mp4"
           data-paper-poster="./media/appendix/embodiedstudio-walkthrough.webp"
           aria-label="EmbodiedStudio 项目讲解" data-aria-en="EmbodiedStudio project walkthrough">
           <track kind="captions" src="./media/appendix/embodiedstudio-walkthrough.en.vtt" srclang="en" label="English" default>
         </video>
+        <figcaption class="walkthrough-bar">
+          <div class="walkthrough-chapters" role="group" aria-label="讲解章节" data-aria-en="Walkthrough chapters">
+            <button type="button" class="chapter-pill is-active" data-chapter-time="0"><span class="chapter-ts">0:00</span><span data-en="Overview">平台概览</span></button>
+            <button type="button" class="chapter-pill" data-chapter-time="25"><span class="chapter-ts">0:25</span><span data-en="3D Workbench">三维工作台</span></button>
+            <button type="button" class="chapter-pill" data-chapter-time="47"><span class="chapter-ts">0:47</span><span data-en="50-Task Benchmark">50 项基准评测</span></button>
+            <button type="button" class="chapter-pill" data-chapter-time="67"><span class="chapter-ts">1:07</span><span data-en="Stateful Scoring">同步有状态评分</span></button>
+            <button type="button" class="chapter-pill" data-chapter-time="154"><span class="chapter-ts">2:34</span><span data-en="Interactive Appendix">交互式附录</span></button>
+          </div>
+          <span class="walkthrough-duration mono-tag">02:59</span>
+        </figcaption>
       </figure>
+    </section>
+
+    <section id="abstract" class="paper-section paper-width">
+      <header class="section-heading">
+        <div>
+          <span class="section-eyebrow" data-en="OVERVIEW">摘要概览</span>
+          <h2 data-en="Overview">概览</h2>
+        </div>
+      </header>
+      <div class="abstract-card">
+        <p id="manuscript-abstract" class="paper-copy" lang="zh-CN"></p>
+        <div class="abstract-pillars" aria-label="核心交付物" data-aria-en="Core deliverables">
+          <div class="pillar-chip">
+            <code data-en="01 · Frozen Environments">01 · 冻结交互环境</code>
+            <span data-en="Jointly authored scene & task programs refined under simulator checks and independent review.">联合编写场景与任务程序，在仿真测量与独立审核后冻结交付。</span>
+          </div>
+          <div class="pillar-chip">
+            <code data-en="02 · Stateful Rubrics">02 · 有状态评分程序</code>
+            <span data-en="Replayable event-ordered rubrics with 92.39% requirement expression and 0.00% false positives.">可回放的事件有序评分程序，条件表达 92.39% 且保持 0.00% 误报。</span>
+          </div>
+          <div class="pillar-chip">
+            <code data-en="03 · Construction & Execution Experience">03 · 构建与执行经验</code>
+            <span data-en="Native authoring histories for layout models and physics-verified rollouts for policy learning.">沉淀正向构建经验用于布局学习，并产出物理验证的机器人执行数据。</span>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section id="method" class="paper-section paper-width">
       <header class="section-heading">
-        <h2 data-en="Method">方法</h2>
+        <div>
+          <span class="section-eyebrow" data-en="METHODOLOGY">方法架构</span>
+          <h2 data-en="Method">方法</h2>
+        </div>
         <span class="source-note" data-en="Click stages, programs, or the before/after revision toggle">点击阶段、程序源或修订前后状态交互探索</span>
       </header>
       <div id="method-architecture" class="method-architecture" aria-label="EmbodiedStudio 交互式方法架构" data-aria-en="EmbodiedStudio interactive method architecture"></div>
@@ -160,7 +194,10 @@
 
     <section id="results" class="paper-section paper-width">
       <header class="section-heading">
-        <h2 data-en="Results">实验结果</h2>
+        <div>
+          <span class="section-eyebrow" data-en="BENCHMARK & ABLATIONS">实验评测</span>
+          <h2 data-en="Results">实验结果</h2>
+        </div>
       </header>
 
       <div class="reading-tabs results-tabs" aria-label="实验分类" data-aria-en="Result category">
@@ -247,7 +284,10 @@
 
     <section id="gallery" class="paper-section paper-width">
       <header class="section-heading">
-        <h2 data-en="Generated Scenes">生成场景</h2>
+        <div>
+          <span class="section-eyebrow" data-en="FROZEN SCENES">场景画廊</span>
+          <h2 data-en="Generated Scenes">生成场景</h2>
+        </div>
       </header>
 
       <div class="gallery-controls">
@@ -304,8 +344,27 @@
 
     <section id="execution" class="paper-section paper-width">
       <header class="section-heading">
-        <h2 data-en="Robot Rollouts">机器人执行</h2>
+        <div>
+          <span class="section-eyebrow" data-en="PHYSICS ROLLOUTS & SCORING">真机物理仿真与同步评分</span>
+          <h2 data-en="Robot Rollouts">机器人执行</h2>
+        </div>
+        <span id="rollout-summary" class="source-note" data-en="27 physics-verified executions · all synced with stateful rubric scores">27 条物理验证执行录像 · 全程附带真实有状态评分变化</span>
       </header>
+
+      <div class="rollout-controls">
+        <div id="rollout-filter-tabs" class="reading-tabs" role="group" aria-label="执行录像分类" data-aria-en="Rollout category">
+          <button type="button" data-rollout-filter="all" aria-pressed="true" data-en="All (27)">全部 (27)</button>
+          <button type="button" data-rollout-filter="featured" aria-pressed="false" data-en="Featured (8)">精选多尺度 (8)</button>
+          <button type="button" data-rollout-filter="tabletop" aria-pressed="false" data-en="Tabletop Suite (20)">桌面全套 (20)</button>
+          <button type="button" data-rollout-filter="embodiment" aria-pressed="false" data-en="Cross-Embodiment (4)">跨本体对比 (4)</button>
+          <button type="button" data-rollout-filter="room" aria-pressed="false" data-en="Room & Kitchen (4)">房间与厨房 (4)</button>
+        </div>
+        <div class="rollout-pager">
+          <button type="button" id="previous-clip" class="quiet-button compact-btn" aria-label="上一条执行录像" data-aria-en="Previous rollout">‹ <span data-en="Prev">上一条</span></button>
+          <span id="clip-counter" class="mono-tag">1 / 27</span>
+          <button type="button" id="next-clip" class="quiet-button compact-btn" aria-label="下一条执行录像" data-aria-en="Next rollout"><span data-en="Next">下一条</span> ›</button>
+        </div>
+      </div>
 
       <div class="clip-reader">
         <figure class="video-stage">
@@ -333,17 +392,6 @@
 
       <div id="clip-cards" class="case-grid clip-grid" aria-label="机器人执行录像" data-aria-en="Robot rollout clips"></div>
 
-    </section>
-
-    <section id="appendix-rollouts" class="paper-section paper-width">
-      <header class="section-heading">
-        <h2 data-en="More Tabletop Rollouts">更多桌面任务录像</h2>
-      </header>
-      <figure class="video-stage appendix-stage">
-        <video id="appendix-video" controls playsinline preload="none"></video>
-        <figcaption id="appendix-video-caption" aria-live="polite"></figcaption>
-      </figure>
-      <div id="appendix-clip-cards" class="case-grid clip-grid" aria-label="附录录像" data-aria-en="Appendix rollout clips"></div>
     </section>
 
     <footer class="paper-footer paper-width">

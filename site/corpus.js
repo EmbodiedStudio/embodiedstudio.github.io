@@ -636,7 +636,9 @@ export const corpus = {
           ]
         ],
         "transitionsSha256": "2cf243125ee1512095bc8b366ba20d16e1f9695b6a3c0597c0c4c6190c582328"
-      }
+      },
+      "featured": true,
+      "group": "tabletop"
     },
     {
       "id": "T07",
@@ -650,7 +652,9 @@ export const corpus = {
       "episode": "8ece6208e1514ff2",
       "revision": "08fb8a1095962b27a501c01b",
       "video": "./media/corpus/T07-episode.mp4",
-      "poster": "./media/corpus/T07-poster.webp"
+      "poster": "./media/corpus/T07-poster.webp",
+      "featured": true,
+      "group": "tabletop"
     },
     {
       "id": "T15",
@@ -697,7 +701,9 @@ export const corpus = {
         "transitionsSha256": "30dac8afb1cbbe1781d184bec3e09565673ba28f756910c9c9113577e9f3c493",
         "rubricVersion": "t15-process-score-v1-bbde910480ffd6ef1d45cc3b",
         "rubricSha256": "93d8b277b0639386cde8a1f4eaf4ffd660ad368cf8384c82eaa1650229e2b57b"
-      }
+      },
+      "featured": true,
+      "group": "tabletop"
     },
     {
       "id": "T16",
@@ -747,7 +753,9 @@ export const corpus = {
           ]
         ],
         "transitionsSha256": "999a7d6b9ea713c485a50b71aa5e8f42b10647a4c6785789a0d566b87eb17d50"
-      }
+      },
+      "featured": true,
+      "group": "tabletop"
     },
     {
       "id": "R10",
@@ -777,7 +785,9 @@ export const corpus = {
           ]
         ],
         "transitionsSha256": "f5f0139270d77fea69fde91bcf663c6b2fdc0ee95d2cfa0fb07d3bd655895d2e"
-      }
+      },
+      "featured": true,
+      "group": "room"
     },
     {
       "id": "R18",
@@ -817,7 +827,9 @@ export const corpus = {
           ]
         ],
         "transitionsSha256": "282412b3553f797eb1124f451aa8004a8f46a7a4465cd87c52e4255787c4c476"
-      }
+      },
+      "featured": true,
+      "group": "room"
     },
     {
       "id": "Bowl",
@@ -852,7 +864,9 @@ export const corpus = {
           ]
         ],
         "transitionsSha256": "e2643289b2940dfe2cb34b04da19b232be9114fd2fd2f9d0d71423c71dae824f"
-      }
+      },
+      "featured": true,
+      "group": "room"
     },
     {
       "id": "Oil",
@@ -902,6 +916,1427 @@ export const corpus = {
           ]
         ],
         "transitionsSha256": "5e3ef8f8cf3bd2766da9af674a743580113cd30ff0b0cd366ce65c9b9efd1ef3"
+      },
+      "featured": true,
+      "group": "room"
+    },
+    {
+      "id": "T02",
+      "name": [
+        "分类水果",
+        "Sort fruit"
+      ],
+      "robot": "UR5 + WSG",
+      "seconds": 223.3,
+      "reward": 1.0,
+      "episode": "0e77c68edb834bf4",
+      "revision": "93abfd7b8c3b85a87f8b9c32",
+      "video": "./media/appendix/T02.mp4",
+      "poster": "./media/appendix/T02.webp",
+      "featured": false,
+      "group": "tabletop",
+      "scoring": {
+        "cycles": 4466,
+        "events": [
+          [
+            0,
+            0.0,
+            false
+          ],
+          [
+            22.0,
+            0.125,
+            false
+          ],
+          [
+            49.05,
+            0.25,
+            false
+          ],
+          [
+            49.1,
+            0.125,
+            false
+          ],
+          [
+            49.45,
+            0.25,
+            false
+          ],
+          [
+            78.3,
+            0.375,
+            false
+          ],
+          [
+            103.1,
+            0.5,
+            false
+          ],
+          [
+            128.0,
+            0.375,
+            false
+          ],
+          [
+            128.05,
+            0.5,
+            false
+          ],
+          [
+            129.75,
+            0.625,
+            false
+          ],
+          [
+            155.85,
+            0.75,
+            false
+          ],
+          [
+            188.75,
+            0.875,
+            false
+          ],
+          [
+            188.8,
+            0.75,
+            false
+          ],
+          [
+            189.0,
+            0.875,
+            false
+          ],
+          [
+            189.05,
+            0.75,
+            false
+          ],
+          [
+            189.1,
+            0.875,
+            false
+          ],
+          [
+            222.65,
+            1.0,
+            false
+          ],
+          [
+            222.7,
+            0.875,
+            false
+          ],
+          [
+            222.8,
+            1.0,
+            false
+          ],
+          [
+            223.3,
+            1.0,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "T03",
+      "name": [
+        "布置餐桌",
+        "Set the table"
+      ],
+      "robot": "Dual PiPER",
+      "seconds": 325.533333,
+      "reward": 1.0,
+      "episode": "7b0032f0c7e54a7c",
+      "revision": "5a0bbcba49156685c05f0e3d",
+      "video": "./media/appendix/T03.mp4",
+      "poster": "./media/appendix/T03.webp",
+      "featured": false,
+      "group": "tabletop",
+      "scoring": {
+        "cycles": 9766,
+        "events": [
+          [
+            0,
+            0.0,
+            false
+          ],
+          [
+            73.366667,
+            0.25,
+            false
+          ],
+          [
+            73.8,
+            0.0,
+            false
+          ],
+          [
+            78.2,
+            0.25,
+            false
+          ],
+          [
+            156.266667,
+            0.5,
+            false
+          ],
+          [
+            236.8,
+            0.75,
+            false
+          ],
+          [
+            305.733333,
+            1.0,
+            false
+          ],
+          [
+            325.533333,
+            1.0,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "T04",
+      "name": [
+        "叠放碗",
+        "Stack bowls"
+      ],
+      "robot": "ARX X5",
+      "seconds": 65.083333,
+      "reward": 1.0,
+      "episode": "b5c4ad86d2e64db7",
+      "revision": "eb4d38a430817684bfcc5421",
+      "video": "./media/appendix/T04.mp4",
+      "poster": "./media/appendix/T04.webp",
+      "featured": false,
+      "group": "tabletop",
+      "scoring": {
+        "cycles": 3905,
+        "events": [
+          [
+            0,
+            0.0,
+            false
+          ],
+          [
+            62.183333,
+            0.6,
+            false
+          ],
+          [
+            62.25,
+            0.0,
+            false
+          ],
+          [
+            62.266667,
+            0.6,
+            false
+          ],
+          [
+            65.083333,
+            1.0,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "T05",
+      "name": [
+        "排列积木",
+        "Order blocks"
+      ],
+      "robot": "UR5 + WSG",
+      "seconds": 114.2,
+      "reward": 1.0,
+      "episode": "f87d428b3e8b4558",
+      "revision": "5621580906808a5627dee9b5",
+      "video": "./media/appendix/T05.mp4",
+      "poster": "./media/appendix/T05.webp",
+      "featured": false,
+      "group": "tabletop",
+      "scoring": {
+        "cycles": 2284,
+        "events": [
+          [
+            0,
+            0.0,
+            false
+          ],
+          [
+            114.2,
+            1.0,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "T06",
+      "name": [
+        "挂杯子",
+        "Hang a mug"
+      ],
+      "robot": "UR5 + WSG",
+      "seconds": 75.866667,
+      "reward": 1.0,
+      "episode": "c76e518fc5cb43a4",
+      "revision": "951c3830656eb4eb8e443010",
+      "video": "./media/appendix/T06.mp4",
+      "poster": "./media/appendix/T06.webp",
+      "featured": false,
+      "group": "tabletop",
+      "scoring": {
+        "cycles": 2276,
+        "events": [
+          [
+            0,
+            0.0,
+            false
+          ],
+          [
+            13.4,
+            0.25,
+            false
+          ],
+          [
+            75.866667,
+            1.0,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "T08",
+      "name": [
+        "双机器人协作取杯",
+        "Two robots retrieve a cup"
+      ],
+      "robot": "Dual Fetch",
+      "seconds": 106.7,
+      "reward": 1.0,
+      "episode": "cdb102a68f874dab",
+      "revision": "978ef5382d9a40813ba94bbb",
+      "video": "./media/appendix/T08.mp4",
+      "poster": "./media/appendix/T08.webp",
+      "featured": false,
+      "group": "tabletop",
+      "scoring": {
+        "cycles": 2134,
+        "events": [
+          [
+            0,
+            0.0,
+            false
+          ],
+          [
+            41.2,
+            0.25,
+            false
+          ],
+          [
+            74.15,
+            0.5,
+            false
+          ],
+          [
+            100.65,
+            0.8,
+            false
+          ],
+          [
+            106.7,
+            1.0,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "T09",
+      "name": [
+        "关上容器",
+        "Close a container"
+      ],
+      "robot": "Galaxea R1 Pro",
+      "seconds": 50.1,
+      "reward": 1.0,
+      "episode": "efc5d84949f642d4",
+      "revision": "afba4eafe76b3142748bc282",
+      "video": "./media/appendix/T09.mp4",
+      "poster": "./media/appendix/T09.webp",
+      "featured": false,
+      "group": "tabletop",
+      "scoring": {
+        "cycles": 1002,
+        "events": [
+          [
+            0,
+            0.0,
+            false
+          ],
+          [
+            50.1,
+            1.0,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "T10",
+      "name": [
+        "扶正瓶子",
+        "Stand a bottle upright"
+      ],
+      "robot": "Fetch",
+      "seconds": 22.7,
+      "reward": 1.0,
+      "episode": "17a1cc83518a4a8e",
+      "revision": "23e3016e76b3fc06d77e1814",
+      "video": "./media/appendix/T10.mp4",
+      "poster": "./media/appendix/T10.webp",
+      "featured": false,
+      "group": "tabletop",
+      "scoring": {
+        "cycles": 454,
+        "events": [
+          [
+            0,
+            0.0,
+            false
+          ],
+          [
+            22.7,
+            1.0,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "T11",
+      "name": [
+        "从托盘转移物品",
+        "Transfer objects from a tray"
+      ],
+      "robot": "UR5 + WSG",
+      "seconds": 88.15,
+      "reward": 1.0,
+      "episode": "218368160c5a4aaa",
+      "revision": "94a309e11465471f5bec926f",
+      "video": "./media/appendix/T11.mp4",
+      "poster": "./media/appendix/T11.webp",
+      "featured": false,
+      "group": "tabletop",
+      "scoring": {
+        "cycles": 1763,
+        "events": [
+          [
+            0,
+            0.0,
+            false
+          ],
+          [
+            26.45,
+            0.333333,
+            false
+          ],
+          [
+            58.75,
+            0.666667,
+            false
+          ],
+          [
+            87.65,
+            1.0,
+            false
+          ],
+          [
+            88.15,
+            1.0,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "T12",
+      "name": [
+        "倾倒木球",
+        "Pour wooden balls"
+      ],
+      "robot": "ARX X5",
+      "seconds": 42.75,
+      "reward": 1.0,
+      "episode": "7b313ce129984401",
+      "revision": "4b790ab0c19b7513120fe83c",
+      "video": "./media/appendix/T12.mp4",
+      "poster": "./media/appendix/T12.webp",
+      "featured": false,
+      "group": "tabletop",
+      "scoring": {
+        "cycles": 855,
+        "events": [
+          [
+            0,
+            0.0,
+            false
+          ],
+          [
+            18.6,
+            0.15,
+            false
+          ],
+          [
+            18.65,
+            0.3,
+            false
+          ],
+          [
+            18.75,
+            0.45,
+            false
+          ],
+          [
+            18.9,
+            0.6,
+            false
+          ],
+          [
+            42.75,
+            1.0,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "T13",
+      "name": [
+        "用夹钳移物",
+        "Move objects with tongs"
+      ],
+      "robot": "PiPER",
+      "seconds": 120.9,
+      "reward": 1.0,
+      "episode": "22ee54418a8447f6",
+      "revision": "7b33ef3533f735971ef98568",
+      "video": "./media/appendix/T13.mp4",
+      "poster": "./media/appendix/T13.webp",
+      "featured": false,
+      "group": "tabletop",
+      "scoring": {
+        "cycles": 2418,
+        "events": [
+          [
+            0,
+            0.0,
+            false
+          ],
+          [
+            36.7,
+            0.25,
+            false
+          ],
+          [
+            64.35,
+            0.0,
+            false
+          ],
+          [
+            64.8,
+            0.5,
+            false
+          ],
+          [
+            92.45,
+            0.0,
+            false
+          ],
+          [
+            92.95,
+            0.75,
+            false
+          ],
+          [
+            120.9,
+            1.0,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "T14",
+      "name": [
+        "清扫碎屑",
+        "Sweep debris"
+      ],
+      "robot": "Dual ARX X5",
+      "seconds": 235.291667,
+      "reward": 1.0,
+      "episode": "e69f9881d19c4b38",
+      "revision": "83b4415049e65837353ce171",
+      "video": "./media/appendix/T14.mp4",
+      "poster": "./media/appendix/T14.webp",
+      "featured": false,
+      "group": "tabletop",
+      "scoring": {
+        "cycles": 5647,
+        "events": [
+          [
+            0,
+            0.0,
+            false
+          ],
+          [
+            93.25,
+            0.25,
+            false
+          ],
+          [
+            93.416667,
+            0.125,
+            false
+          ],
+          [
+            93.541667,
+            0.0,
+            false
+          ],
+          [
+            94.583333,
+            0.125,
+            false
+          ],
+          [
+            94.791667,
+            0.0,
+            false
+          ],
+          [
+            95.458333,
+            0.125,
+            false
+          ],
+          [
+            95.5,
+            0.0,
+            false
+          ],
+          [
+            98.041667,
+            0.125,
+            false
+          ],
+          [
+            98.541667,
+            0.375,
+            false
+          ],
+          [
+            99.958333,
+            0.25,
+            false
+          ],
+          [
+            135.125,
+            0.125,
+            false
+          ],
+          [
+            135.416667,
+            0.0,
+            false
+          ],
+          [
+            135.958333,
+            0.125,
+            false
+          ],
+          [
+            136.041667,
+            0.25,
+            false
+          ],
+          [
+            136.583333,
+            0.0,
+            false
+          ],
+          [
+            137.083333,
+            0.25,
+            false
+          ],
+          [
+            137.5,
+            0.125,
+            false
+          ],
+          [
+            137.666667,
+            0.0,
+            false
+          ],
+          [
+            138.0,
+            0.125,
+            false
+          ],
+          [
+            138.041667,
+            0.0,
+            false
+          ],
+          [
+            139.166667,
+            0.125,
+            false
+          ],
+          [
+            139.625,
+            0.25,
+            false
+          ],
+          [
+            139.708333,
+            0.125,
+            false
+          ],
+          [
+            140.708333,
+            0.25,
+            false
+          ],
+          [
+            155.958333,
+            0.375,
+            false
+          ],
+          [
+            157.458333,
+            0.25,
+            false
+          ],
+          [
+            157.958333,
+            0.375,
+            false
+          ],
+          [
+            176.625,
+            0.25,
+            false
+          ],
+          [
+            177.041667,
+            0.125,
+            false
+          ],
+          [
+            177.333333,
+            0.0,
+            false
+          ],
+          [
+            178.25,
+            0.25,
+            false
+          ],
+          [
+            178.625,
+            0.375,
+            false
+          ],
+          [
+            178.916667,
+            0.5,
+            false
+          ],
+          [
+            179.583333,
+            0.375,
+            false
+          ],
+          [
+            180.041667,
+            0.0,
+            false
+          ],
+          [
+            180.166667,
+            0.125,
+            false
+          ],
+          [
+            180.5,
+            0.0,
+            false
+          ],
+          [
+            180.541667,
+            0.125,
+            false
+          ],
+          [
+            180.583333,
+            0.25,
+            false
+          ],
+          [
+            180.791667,
+            0.0,
+            false
+          ],
+          [
+            181.0,
+            0.125,
+            false
+          ],
+          [
+            181.291667,
+            0.25,
+            false
+          ],
+          [
+            181.833333,
+            0.375,
+            false
+          ],
+          [
+            181.958333,
+            0.5,
+            false
+          ],
+          [
+            182.166667,
+            0.375,
+            false
+          ],
+          [
+            182.5,
+            0.25,
+            false
+          ],
+          [
+            182.708333,
+            0.125,
+            false
+          ],
+          [
+            182.75,
+            0.0,
+            false
+          ],
+          [
+            183.0,
+            0.125,
+            false
+          ],
+          [
+            183.25,
+            0.25,
+            false
+          ],
+          [
+            183.375,
+            0.0,
+            false
+          ],
+          [
+            183.541667,
+            0.125,
+            false
+          ],
+          [
+            183.875,
+            0.375,
+            false
+          ],
+          [
+            184.083333,
+            0.25,
+            false
+          ],
+          [
+            184.166667,
+            0.125,
+            false
+          ],
+          [
+            185.125,
+            0.25,
+            false
+          ],
+          [
+            186.208333,
+            0.375,
+            false
+          ],
+          [
+            187.416667,
+            0.125,
+            false
+          ],
+          [
+            187.5,
+            0.0,
+            false
+          ],
+          [
+            188.166667,
+            0.375,
+            false
+          ],
+          [
+            188.375,
+            0.25,
+            false
+          ],
+          [
+            188.5,
+            0.375,
+            false
+          ],
+          [
+            188.958333,
+            0.0,
+            false
+          ],
+          [
+            189.5,
+            0.125,
+            false
+          ],
+          [
+            189.583333,
+            0.25,
+            false
+          ],
+          [
+            189.833333,
+            0.375,
+            false
+          ],
+          [
+            190.125,
+            0.5,
+            false
+          ],
+          [
+            190.25,
+            0.0,
+            false
+          ],
+          [
+            192.041667,
+            0.25,
+            false
+          ],
+          [
+            192.166667,
+            0.125,
+            false
+          ],
+          [
+            192.208333,
+            0.0,
+            false
+          ],
+          [
+            192.833333,
+            0.5,
+            false
+          ],
+          [
+            193.0,
+            0.625,
+            false
+          ],
+          [
+            195.375,
+            0.25,
+            false
+          ],
+          [
+            195.875,
+            0.625,
+            false
+          ],
+          [
+            196.041667,
+            0.25,
+            false
+          ],
+          [
+            196.541667,
+            0.5,
+            false
+          ],
+          [
+            196.583333,
+            0.375,
+            false
+          ],
+          [
+            196.708333,
+            0.0,
+            false
+          ],
+          [
+            197.208333,
+            0.375,
+            false
+          ],
+          [
+            197.333333,
+            0.5,
+            false
+          ],
+          [
+            209.125,
+            0.625,
+            false
+          ],
+          [
+            213.166667,
+            0.75,
+            false
+          ],
+          [
+            213.75,
+            0.625,
+            false
+          ],
+          [
+            216.541667,
+            0.75,
+            false
+          ],
+          [
+            216.708333,
+            0.625,
+            false
+          ],
+          [
+            216.916667,
+            0.375,
+            false
+          ],
+          [
+            217.041667,
+            0.25,
+            false
+          ],
+          [
+            217.25,
+            0.125,
+            false
+          ],
+          [
+            217.291667,
+            0.25,
+            false
+          ],
+          [
+            217.5,
+            0.375,
+            false
+          ],
+          [
+            217.666667,
+            0.25,
+            false
+          ],
+          [
+            217.708333,
+            0.0,
+            false
+          ],
+          [
+            217.791667,
+            0.125,
+            false
+          ],
+          [
+            217.875,
+            0.25,
+            false
+          ],
+          [
+            218.041667,
+            0.125,
+            false
+          ],
+          [
+            218.25,
+            0.375,
+            false
+          ],
+          [
+            218.291667,
+            0.25,
+            false
+          ],
+          [
+            218.375,
+            0.375,
+            false
+          ],
+          [
+            218.458333,
+            0.25,
+            false
+          ],
+          [
+            218.541667,
+            0.375,
+            false
+          ],
+          [
+            218.666667,
+            0.25,
+            false
+          ],
+          [
+            219.125,
+            0.375,
+            false
+          ],
+          [
+            219.208333,
+            0.5,
+            false
+          ],
+          [
+            219.416667,
+            0.625,
+            false
+          ],
+          [
+            219.666667,
+            0.75,
+            false
+          ],
+          [
+            219.75,
+            0.875,
+            false
+          ],
+          [
+            220.0,
+            1.0,
+            false
+          ],
+          [
+            223.541667,
+            0.875,
+            false
+          ],
+          [
+            223.625,
+            0.625,
+            false
+          ],
+          [
+            224.25,
+            0.5,
+            false
+          ],
+          [
+            224.75,
+            0.625,
+            false
+          ],
+          [
+            226.291667,
+            0.75,
+            false
+          ],
+          [
+            226.5,
+            1.0,
+            false
+          ],
+          [
+            235.291667,
+            1.0,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "T17",
+      "name": [
+        "把笔放进笔筒",
+        "Organize pens in a holder"
+      ],
+      "robot": "UR5 + WSG",
+      "seconds": 245.8,
+      "reward": 1.0,
+      "episode": "trial-independent-prefix-originalscore",
+      "revision": "150eccf19a7d9ec907cafdd5",
+      "video": "./media/appendix/T17.mp4",
+      "poster": "./media/appendix/T17.webp",
+      "featured": false,
+      "group": "tabletop",
+      "scoring": {
+        "cycles": 4917,
+        "events": [
+          [
+            0,
+            0.0,
+            false
+          ],
+          [
+            75.5,
+            0.25,
+            false
+          ],
+          [
+            128.65,
+            0.5,
+            false
+          ],
+          [
+            189.15,
+            0.75,
+            false
+          ],
+          [
+            243.2,
+            1.0,
+            false
+          ],
+          [
+            245.8,
+            1.0,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "T18",
+      "name": [
+        "摆放手机",
+        "Place a phone"
+      ],
+      "robot": "Unitree G1",
+      "seconds": 35.166667,
+      "reward": 1.0,
+      "episode": "bfb194ae185b48ad",
+      "revision": "f39fb4d4b41417368a446bf4",
+      "video": "./media/appendix/T18.mp4",
+      "poster": "./media/appendix/T18.webp",
+      "featured": false,
+      "group": "tabletop",
+      "scoring": {
+        "cycles": 1055,
+        "events": [
+          [
+            0,
+            0.0,
+            false
+          ],
+          [
+            35.166667,
+            1.0,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "T19",
+      "name": [
+        "按下按钮",
+        "Press a button"
+      ],
+      "robot": "UR5e",
+      "seconds": 24.3,
+      "reward": 1.0,
+      "episode": "2a661036cff044d8",
+      "revision": "dd50444ab5fe0c97cdc0095b",
+      "video": "./media/appendix/T19.mp4",
+      "poster": "./media/appendix/T19.webp",
+      "featured": false,
+      "group": "tabletop",
+      "scoring": {
+        "cycles": 729,
+        "events": [
+          [
+            0,
+            0.0,
+            false
+          ],
+          [
+            22.333333,
+            0.4,
+            false
+          ],
+          [
+            24.3,
+            1.0,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "T20",
+      "name": [
+        "搬运装载托盘",
+        "Move a loaded tray"
+      ],
+      "robot": "Dual UR5",
+      "seconds": 72.7,
+      "reward": 1.0,
+      "episode": "a8b434a4d7264392",
+      "revision": "d9af6937161ed11947de9d2d",
+      "video": "./media/appendix/T20.mp4",
+      "poster": "./media/appendix/T20.webp",
+      "featured": false,
+      "group": "tabletop",
+      "scoring": {
+        "cycles": 1454,
+        "events": [
+          [
+            0,
+            0.0,
+            false
+          ],
+          [
+            72.7,
+            1.0,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "T01-fetch",
+      "name": [
+        "Fetch 摆放苹果",
+        "Fetch places the apple"
+      ],
+      "robot": "Fetch",
+      "seconds": 21.9,
+      "reward": 1.0,
+      "episode": "c7b1c3e3362f408e",
+      "revision": "131ded6bbc8143dd2c33516a",
+      "video": "./media/appendix/T01-fetch.mp4",
+      "poster": "./media/appendix/T01-fetch.webp",
+      "featured": false,
+      "group": "embodiment",
+      "scoring": {
+        "cycles": 438,
+        "events": [
+          [
+            0,
+            0.0,
+            false
+          ],
+          [
+            13.45,
+            0.2,
+            false
+          ],
+          [
+            21.9,
+            1.0,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "T01-arx-x5a",
+      "name": [
+        "ARX X5A 摆放苹果",
+        "ARX X5A places the apple"
+      ],
+      "robot": "ARX X5A",
+      "seconds": 19.05,
+      "reward": 1.0,
+      "episode": "431fefcb2f334696",
+      "revision": "05fb7c5870bc9ed66374011e",
+      "video": "./media/appendix/T01-arx-x5a.mp4",
+      "poster": "./media/appendix/T01-arx-x5a.webp",
+      "featured": false,
+      "group": "embodiment",
+      "scoring": {
+        "cycles": 381,
+        "events": [
+          [
+            0,
+            0.0,
+            false
+          ],
+          [
+            10.75,
+            0.2,
+            false
+          ],
+          [
+            19.0,
+            0.5,
+            false
+          ],
+          [
+            19.05,
+            1.0,
+            true
+          ]
+        ]
+      }
+    },
+    {
+      "id": "T01-yam",
+      "name": [
+        "I2RT YAM 摆放苹果",
+        "I2RT YAM places the apple"
+      ],
+      "robot": "I2RT YAM",
+      "seconds": 17.35,
+      "reward": 1.0,
+      "episode": "07c7b25ed45f4784",
+      "revision": "7c63b148039d19862ebdfa28",
+      "video": "./media/appendix/T01-yam.mp4",
+      "poster": "./media/appendix/T01-yam.webp",
+      "featured": false,
+      "group": "embodiment",
+      "scoring": {
+        "cycles": 347,
+        "events": [
+          [
+            0,
+            0.0,
+            false
+          ],
+          [
+            10.65,
+            0.2,
+            false
+          ],
+          [
+            17.35,
+            1.0,
+            true
+          ]
+        ]
       }
     }
   ],
@@ -940,198 +2375,6 @@ export const corpus = {
         "./media/corpus/R12-baseline.webp",
         "./media/corpus/R12-fit.webp"
       ]
-    }
-  ],
-  "appendixVideos": [
-    {
-      "id": "T02",
-      "name": [
-        "分类水果",
-        "Sort fruit"
-      ],
-      "seconds": 223.4,
-      "video": "./media/appendix/T02.mp4",
-      "poster": "./media/appendix/T02.webp"
-    },
-    {
-      "id": "T03",
-      "name": [
-        "布置餐桌",
-        "Set the table"
-      ],
-      "seconds": 325.6,
-      "video": "./media/appendix/T03.mp4",
-      "poster": "./media/appendix/T03.webp"
-    },
-    {
-      "id": "T04",
-      "name": [
-        "叠放碗",
-        "Stack bowls"
-      ],
-      "seconds": 65.1,
-      "video": "./media/appendix/T04.mp4",
-      "poster": "./media/appendix/T04.webp"
-    },
-    {
-      "id": "T05",
-      "name": [
-        "排列积木",
-        "Order blocks"
-      ],
-      "seconds": 114.4,
-      "video": "./media/appendix/T05.mp4",
-      "poster": "./media/appendix/T05.webp"
-    },
-    {
-      "id": "T06",
-      "name": [
-        "挂杯子",
-        "Hang a mug"
-      ],
-      "seconds": 76.0,
-      "video": "./media/appendix/T06.mp4",
-      "poster": "./media/appendix/T06.webp"
-    },
-    {
-      "id": "T08",
-      "name": [
-        "双机器人协作取杯",
-        "Two robots retrieve a cup"
-      ],
-      "seconds": 106.8,
-      "video": "./media/appendix/T08.mp4",
-      "poster": "./media/appendix/T08.webp"
-    },
-    {
-      "id": "T09",
-      "name": [
-        "关上容器",
-        "Close a container"
-      ],
-      "seconds": 50.2,
-      "video": "./media/appendix/T09.mp4",
-      "poster": "./media/appendix/T09.webp"
-    },
-    {
-      "id": "T10",
-      "name": [
-        "扶正瓶子",
-        "Stand a bottle upright"
-      ],
-      "seconds": 22.8,
-      "video": "./media/appendix/T10.mp4",
-      "poster": "./media/appendix/T10.webp"
-    },
-    {
-      "id": "T11",
-      "name": [
-        "从托盘转移物品",
-        "Transfer objects from a tray"
-      ],
-      "seconds": 88.2,
-      "video": "./media/appendix/T11.mp4",
-      "poster": "./media/appendix/T11.webp"
-    },
-    {
-      "id": "T12",
-      "name": [
-        "倾倒木球",
-        "Pour wooden balls"
-      ],
-      "seconds": 42.8,
-      "video": "./media/appendix/T12.mp4",
-      "poster": "./media/appendix/T12.webp"
-    },
-    {
-      "id": "T13",
-      "name": [
-        "用夹钳移物",
-        "Move objects with tongs"
-      ],
-      "seconds": 121.0,
-      "video": "./media/appendix/T13.mp4",
-      "poster": "./media/appendix/T13.webp"
-    },
-    {
-      "id": "T14",
-      "name": [
-        "清扫碎屑",
-        "Sweep debris"
-      ],
-      "seconds": 235.375,
-      "video": "./media/appendix/T14.mp4",
-      "poster": "./media/appendix/T14.webp"
-    },
-    {
-      "id": "T17",
-      "name": [
-        "把笔放进笔筒",
-        "Organize pens in a holder"
-      ],
-      "seconds": 245.9,
-      "video": "./media/appendix/T17.mp4",
-      "poster": "./media/appendix/T17.webp"
-    },
-    {
-      "id": "T18",
-      "name": [
-        "摆放手机",
-        "Place a phone"
-      ],
-      "seconds": 35.2,
-      "video": "./media/appendix/T18.mp4",
-      "poster": "./media/appendix/T18.webp"
-    },
-    {
-      "id": "T19",
-      "name": [
-        "按下按钮",
-        "Press a button"
-      ],
-      "seconds": 24.4,
-      "video": "./media/appendix/T19.mp4",
-      "poster": "./media/appendix/T19.webp"
-    },
-    {
-      "id": "T20",
-      "name": [
-        "搬运装载托盘",
-        "Move a loaded tray"
-      ],
-      "seconds": 72.8,
-      "video": "./media/appendix/T20.mp4",
-      "poster": "./media/appendix/T20.webp"
-    },
-    {
-      "id": "T01-fetch",
-      "name": [
-        "Fetch 摆放苹果",
-        "Fetch places the apple"
-      ],
-      "seconds": 22.0,
-      "video": "./media/appendix/T01-fetch.mp4",
-      "poster": "./media/appendix/T01-fetch.webp"
-    },
-    {
-      "id": "T01-arx-x5a",
-      "name": [
-        "ARX X5A 摆放苹果",
-        "ARX X5A places the apple"
-      ],
-      "seconds": 19.1,
-      "video": "./media/appendix/T01-arx-x5a.mp4",
-      "poster": "./media/appendix/T01-arx-x5a.webp"
-    },
-    {
-      "id": "T01-yam",
-      "name": [
-        "I2RT YAM 摆放苹果",
-        "I2RT YAM places the apple"
-      ],
-      "seconds": 17.4,
-      "video": "./media/appendix/T01-yam.mp4",
-      "poster": "./media/appendix/T01-yam.webp"
     }
   ]
 };

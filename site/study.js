@@ -753,10 +753,29 @@ function replay(video) {
     chartNode.replaceChildren(svg);
     events.replaceChildren();
     milestoneButtons = [];
-    for (const [i, [t, score, , phase]] of data.events.entries()) {
-      if (!i || (score === data.events[i - 1][1] && data.events[i][2] === data.events[i - 1][2])) continue;
-      const description = phase ? label(phase) : data.events[i][2] ? tr('完成', 'Complete') : '';
-      const button = el('button', [`${Number(t.toFixed(3))} s`, description, score.toFixed(2)].filter(Boolean).join(' · '), 'event-chip');
+    const rawMilestones = [];
+    for (const [i, ev] of data.events.entries()) {
+      const [t, score, succ, phase] = ev;
+      if (!i || (score === data.events[i - 1][1] && succ === data.events[i - 1][2])) continue;
+      rawMilestones.push([t, score, succ, phase]);
+    }
+    // Keep all raw events in the SVG curve, but condense high-frequency contact jitter into clean monotonic milestones for buttons
+    let shownMilestones = rawMilestones;
+    if (rawMilestones.length > 8) {
+      const picked = [];
+      let peak = data.events[0]?.[1] ?? 0;
+      for (const m of rawMilestones) {
+        const [, score, succ] = m;
+        if (score > peak + 1e-6 || succ) {
+          picked.push(m);
+          if (score > peak) peak = score;
+        }
+      }
+      shownMilestones = picked.length ? picked : rawMilestones.slice(-6);
+    }
+    for (const [t, score, succ, phase] of shownMilestones) {
+      const description = phase ? label(phase) : succ ? tr('完成', 'Complete') : '';
+      const button = el('button', [`${Number(t.toFixed(1))} s`, description, score.toFixed(2)].filter(Boolean).join(' · '), 'event-chip');
       button.type = 'button';
       button.addEventListener('click', () => seek(t));
       events.append(button);
@@ -773,9 +792,27 @@ function replay(video) {
 
 function rollouts() {
   const video = $('rollout-video'), cards = $('clip-cards'), caption = $('video-caption');
+  const filterButtons = [...document.querySelectorAll('[data-rollout-filter]')];
+  const prevBtn = $('previous-clip'), nextBtn = $('next-clip'), counter = $('clip-counter');
   const linkedClip = new URLSearchParams(location.search).get('clip');
-  let selected = corpus.videos.find(row => row.id === linkedClip) || corpus.videos.find(row => row.id === 'T07');
+  let activeFilter = 'all';
+  let selected = corpus.videos.find(row => row.id === linkedClip) || corpus.videos.find(row => row.id === 'T07') || corpus.videos[0];
   const score = replay(video);
+
+  function filteredClips(filter = activeFilter) {
+    if (filter === 'featured') return corpus.videos.filter(row => row.featured);
+    if (filter === 'tabletop') {
+      return corpus.videos
+        .filter(row => /^T\d+$/.test(row.id))
+        .sort((a, b) => Number(a.id.slice(1)) - Number(b.id.slice(1)));
+    }
+    if (filter === 'embodiment') {
+      const order = ['T01', 'T01-fetch', 'T01-arx-x5a', 'T01-yam'];
+      return order.map(id => corpus.videos.find(row => row.id === id)).filter(Boolean);
+    }
+    if (filter === 'room') return corpus.videos.filter(row => row.group === 'room');
+    return corpus.videos;
+  }
 
   let request = null;
   let objectUrl = '';
@@ -809,9 +846,58 @@ function rollouts() {
     }
   }
 
+  function selectClip(row, scrollIfNeeded = false) {
+    if (row === selected) return;
+    selected = row;
+    load();
+    render();
+    if (scrollIfNeeded) {
+      const reader = document.querySelector('#execution .clip-reader');
+      const rect = reader?.getBoundingClientRect();
+      if (rect && (rect.top < 64 || rect.top > window.innerHeight * 0.65)) {
+        reader.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+  }
+
+  for (const btn of filterButtons) {
+    btn.addEventListener('click', () => {
+      activeFilter = btn.dataset.rolloutFilter;
+      const list = filteredClips();
+      if (list.length && !list.includes(selected)) {
+        selected = list[0];
+        load();
+      }
+      render();
+    });
+  }
+
+  prevBtn?.addEventListener('click', () => {
+    const list = filteredClips();
+    if (list.length < 2) return;
+    const idx = list.indexOf(selected);
+    selectClip(list[(idx - 1 + list.length) % list.length]);
+  });
+  nextBtn?.addEventListener('click', () => {
+    const list = filteredClips();
+    if (list.length < 2) return;
+    const idx = list.indexOf(selected);
+    selectClip(list[(idx + 1) % list.length]);
+  });
+
   function render() {
+    const list = filteredClips();
+    const currentIdx = Math.max(0, list.indexOf(selected));
+    for (const btn of filterButtons) {
+      btn.setAttribute('aria-pressed', String(btn.dataset.rolloutFilter === activeFilter));
+    }
+    if (counter) counter.textContent = `${currentIdx + 1} / ${list.length}`;
+    if (prevBtn) prevBtn.disabled = list.length < 2;
+    if (nextBtn) nextBtn.disabled = list.length < 2;
+
     $('replay-robot').textContent = selected.robot || tr('机械臂', 'Manipulator');
     caption.textContent = [
+      selected.id,
       local(selected.name),
       selected.robot,
       `${selected.seconds.toFixed(1)} s`,
@@ -819,20 +905,15 @@ function rollouts() {
     ].filter(Boolean).join(' · ');
 
     cards.replaceChildren(
-      ...corpus.videos.map(row =>
+      ...list.map(row =>
         makeCard(
           row.id,
           local(row.name),
           row.poster,
-          [row.robot, `${row.seconds.toFixed(1)} s`].filter(Boolean).join(' · '),
+          [row.robot || tr('机械臂', 'Manipulator'), `${row.seconds.toFixed(1)} s`, `0→${row.reward.toFixed(1)}`].filter(Boolean).join(' · '),
           row === selected,
-          () => {
-            if (row !== selected) {
-              selected = row;
-              load();
-              render();
-            }
-          }
+          () => selectClip(row, true),
+          row.id
         )
       )
     );
@@ -842,33 +923,45 @@ function rollouts() {
   return render;
 }
 
-function appendixRollouts() {
-  const video = $('appendix-video'), cards = $('appendix-clip-cards'), caption = $('appendix-video-caption');
-  let selected = corpus.appendixVideos[0];
-  const buttons = new Map();
+function setupWalkthrough() {
+  const video = $('walkthrough-video');
+  const buttons = [...document.querySelectorAll('[data-chapter-time]')];
+  if (!video || !buttons.length) return;
+  const chapters = buttons
+    .map(btn => ({ btn, time: Number(btn.dataset.chapterTime) }))
+    .sort((a, b) => a.time - b.time);
 
-  function select(row) {
-    selected = row;
-    video.pause();
-    video.poster = row.poster;
-    video.src = row.video;
-    for (const [id, button] of buttons) button.setAttribute('aria-pressed', String(id === row.id));
-    caption.textContent = `${row.id} · ${local(row.name)} · ${row.seconds.toFixed(1)} s`;
+  function syncActive(t) {
+    let active = chapters[0];
+    for (const c of chapters) {
+      if (t + 0.25 >= c.time) active = c;
+    }
+    for (const c of chapters) c.btn.classList.toggle('is-active', c === active);
   }
 
-  select(selected);
-  return () => {
-    buttons.clear();
-    cards.replaceChildren(...corpus.appendixVideos.map(row => {
-      const button = makeCard(row.id, local(row.name), row.poster, `${row.seconds.toFixed(1)} s`,
-        row === selected, () => {
-          if (row !== selected) select(row);
-        }, row.id);
-      buttons.set(row.id, button);
-      return button;
-    }));
-    caption.textContent = `${selected.id} · ${local(selected.name)} · ${selected.seconds.toFixed(1)} s`;
-  };
+  let pendingChapter = null;
+  for (const { btn, time } of chapters) {
+    btn.addEventListener('click', () => {
+      syncActive(time);
+      const jump = () => {
+        pendingChapter = null;
+        try { video.currentTime = time; } catch {}
+        syncActive(time);
+        video.play().catch(() => {});
+      };
+      if (video.readyState >= 1) jump();
+      else {
+        pendingChapter = time;
+        video.addEventListener('loadedmetadata', jump, { once: true });
+        video.preload = 'metadata';
+        video.load();
+      }
+    });
+  }
+  video.addEventListener('timeupdate', () => {
+    if (pendingChapter === null && !video.seeking) syncActive(video.currentTime);
+  });
+  syncActive(0);
 }
 
 function renderLearning(lightbox) {
@@ -942,7 +1035,7 @@ export function setupStudy() {
   const drawRubrics = setupRubricResults();
   const gal = gallery(lightbox);
   const drawRollouts = rollouts();
-  const drawAppendixRollouts = appendixRollouts();
+  setupWalkthrough();
   const players = [...document.querySelectorAll('.paper-page video')];
   for (const player of players) {
     player.addEventListener('play', () => {
@@ -963,7 +1056,6 @@ export function setupStudy() {
     drawRubrics();
     gal.redraw();
     drawRollouts();
-    drawAppendixRollouts();
     renderLearning(lightbox);
   }
 
