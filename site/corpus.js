@@ -941,5 +941,197 @@ export const corpus = {
         "./media/corpus/R12-fit.webp"
       ]
     }
+  ],
+  "appendixVideos": [
+    {
+      "id": "T02",
+      "name": [
+        "分类水果",
+        "Sort fruit"
+      ],
+      "seconds": 223.4,
+      "video": "./media/appendix/T02.mp4",
+      "poster": "./media/appendix/T02.webp"
+    },
+    {
+      "id": "T03",
+      "name": [
+        "布置餐桌",
+        "Set the table"
+      ],
+      "seconds": 325.6,
+      "video": "./media/appendix/T03.mp4",
+      "poster": "./media/appendix/T03.webp"
+    },
+    {
+      "id": "T04",
+      "name": [
+        "叠放碗",
+        "Stack bowls"
+      ],
+      "seconds": 65.1,
+      "video": "./media/appendix/T04.mp4",
+      "poster": "./media/appendix/T04.webp"
+    },
+    {
+      "id": "T05",
+      "name": [
+        "排列积木",
+        "Order blocks"
+      ],
+      "seconds": 114.4,
+      "video": "./media/appendix/T05.mp4",
+      "poster": "./media/appendix/T05.webp"
+    },
+    {
+      "id": "T06",
+      "name": [
+        "挂杯子",
+        "Hang a mug"
+      ],
+      "seconds": 76.0,
+      "video": "./media/appendix/T06.mp4",
+      "poster": "./media/appendix/T06.webp"
+    },
+    {
+      "id": "T08",
+      "name": [
+        "双机器人协作取杯",
+        "Two robots retrieve a cup"
+      ],
+      "seconds": 106.8,
+      "video": "./media/appendix/T08.mp4",
+      "poster": "./media/appendix/T08.webp"
+    },
+    {
+      "id": "T09",
+      "name": [
+        "关上容器",
+        "Close a container"
+      ],
+      "seconds": 50.2,
+      "video": "./media/appendix/T09.mp4",
+      "poster": "./media/appendix/T09.webp"
+    },
+    {
+      "id": "T10",
+      "name": [
+        "扶正瓶子",
+        "Stand a bottle upright"
+      ],
+      "seconds": 22.8,
+      "video": "./media/appendix/T10.mp4",
+      "poster": "./media/appendix/T10.webp"
+    },
+    {
+      "id": "T11",
+      "name": [
+        "从托盘转移物品",
+        "Transfer objects from a tray"
+      ],
+      "seconds": 88.2,
+      "video": "./media/appendix/T11.mp4",
+      "poster": "./media/appendix/T11.webp"
+    },
+    {
+      "id": "T12",
+      "name": [
+        "倾倒木球",
+        "Pour wooden balls"
+      ],
+      "seconds": 42.8,
+      "video": "./media/appendix/T12.mp4",
+      "poster": "./media/appendix/T12.webp"
+    },
+    {
+      "id": "T13",
+      "name": [
+        "用夹钳移物",
+        "Move objects with tongs"
+      ],
+      "seconds": 121.0,
+      "video": "./media/appendix/T13.mp4",
+      "poster": "./media/appendix/T13.webp"
+    },
+    {
+      "id": "T14",
+      "name": [
+        "清扫碎屑",
+        "Sweep debris"
+      ],
+      "seconds": 235.375,
+      "video": "./media/appendix/T14.mp4",
+      "poster": "./media/appendix/T14.webp"
+    },
+    {
+      "id": "T17",
+      "name": [
+        "把笔放进笔筒",
+        "Organize pens in a holder"
+      ],
+      "seconds": 245.9,
+      "video": "./media/appendix/T17.mp4",
+      "poster": "./media/appendix/T17.webp"
+    },
+    {
+      "id": "T18",
+      "name": [
+        "摆放手机",
+        "Place a phone"
+      ],
+      "seconds": 35.2,
+      "video": "./media/appendix/T18.mp4",
+      "poster": "./media/appendix/T18.webp"
+    },
+    {
+      "id": "T19",
+      "name": [
+        "按下按钮",
+        "Press a button"
+      ],
+      "seconds": 24.4,
+      "video": "./media/appendix/T19.mp4",
+      "poster": "./media/appendix/T19.webp"
+    },
+    {
+      "id": "T20",
+      "name": [
+        "搬运装载托盘",
+        "Move a loaded tray"
+      ],
+      "seconds": 72.8,
+      "video": "./media/appendix/T20.mp4",
+      "poster": "./media/appendix/T20.webp"
+    },
+    {
+      "id": "T01-fetch",
+      "name": [
+        "Fetch 摆放苹果",
+        "Fetch places the apple"
+      ],
+      "seconds": 22.0,
+      "video": "./media/appendix/T01-fetch.mp4",
+      "poster": "./media/appendix/T01-fetch.webp"
+    },
+    {
+      "id": "T01-arx-x5a",
+      "name": [
+        "ARX X5A 摆放苹果",
+        "ARX X5A places the apple"
+      ],
+      "seconds": 19.1,
+      "video": "./media/appendix/T01-arx-x5a.mp4",
+      "poster": "./media/appendix/T01-arx-x5a.webp"
+    },
+    {
+      "id": "T01-yam",
+      "name": [
+        "I2RT YAM 摆放苹果",
+        "I2RT YAM places the apple"
+      ],
+      "seconds": 17.4,
+      "video": "./media/appendix/T01-yam.mp4",
+      "poster": "./media/appendix/T01-yam.webp"
+    }
   ]
 };

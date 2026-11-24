@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" data-paper-sections="#paper-title #abstract #method #gallery #execution #results">
+<html lang="zh-CN" data-paper-sections="#paper-title #abstract #walkthrough #method #gallery #execution #appendix-rollouts #results">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -54,6 +54,7 @@
         </a>
         <nav aria-label="页面导航" data-aria-en="Sections">
           <a href="#abstract" data-en="Overview">概览</a>
+          <a href="#walkthrough" data-en="Video">讲解</a>
           <a href="#method" data-en="Method">方法</a>
           <a href="#results" data-en="Results">结果</a>
           <a href="#gallery" data-en="Scenes">场景</a>
@@ -77,7 +78,8 @@
       <p class="paper-intro" data-en="Jointly author scenes, task bindings, robot behaviors, and stateful rubrics under closed-loop simulation feedback—delivering frozen environments with construction and execution experience.">在闭环仿真反馈与独立审核下联合编写场景、任务、机器人行为与评分程序，直接交付可交互冻结环境及构建、执行经验。</p>
 
       <div class="hero-actions">
-        <a class="primary-button" href="#method" data-en="Explore Method">探索方法架构</a>
+        <a class="primary-button" href="#walkthrough" data-en="Watch Walkthrough">观看讲解</a>
+        <a class="quiet-button" href="#method" data-en="Explore Method">探索方法架构</a>
         <a class="quiet-button" href="https://github.com/Runder-sun/EmbodiedStudio" target="_blank" rel="noopener">
           <svg viewBox="0 0 20 20" width="15" height="15" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 1.8a8.2 8.2 0 0 0-2.59 15.98c.41.08.56-.18.56-.4v-1.4c-2.28.5-2.76-1.1-2.76-1.1-.37-.95-.91-1.2-.91-1.2-.75-.51.06-.5.06-.5.82.06 1.26.85 1.26.85.73 1.25 1.92.89 2.39.68.07-.53.29-.89.52-1.1-1.82-.21-3.73-.91-3.73-4.05 0-.9.32-1.63.85-2.2-.09-.21-.37-1.04.08-2.17 0 0 .69-.22 2.26.84a7.8 7.8 0 0 1 4.12 0c1.57-1.06 2.26-.84 2.26-.84.45 1.13.17 1.96.08 2.17.53.57.85 1.3.85 2.2 0 3.15-1.92 3.84-3.75 4.04.3.26.56.76.56 1.54v2.28c0 .22.15.48.57.4A8.2 8.2 0 0 0 10 1.8Z" clip-rule="evenodd"/></svg>
           <span>GitHub</span>
@@ -124,6 +126,20 @@
       <div class="abstract-card">
         <p id="manuscript-abstract" class="paper-copy" lang="zh-CN"></p>
       </div>
+    </section>
+
+    <section id="walkthrough" class="paper-section paper-width">
+      <header class="section-heading">
+        <h2 data-en="Project Walkthrough">项目讲解</h2>
+      </header>
+      <figure class="video-stage walkthrough-stage">
+        <video controls playsinline preload="none"
+          data-paper-video="./media/appendix/embodiedstudio-walkthrough.mp4"
+          data-paper-poster="./media/appendix/embodiedstudio-walkthrough.webp"
+          aria-label="EmbodiedStudio 项目讲解" data-aria-en="EmbodiedStudio project walkthrough">
+          <track kind="captions" src="./media/appendix/embodiedstudio-walkthrough.en.vtt" srclang="en" label="English" default>
+        </video>
+      </figure>
     </section>
 
     <section id="method" class="paper-section paper-width">
@@ -309,6 +325,17 @@
 
       <div id="clip-cards" class="case-grid clip-grid" aria-label="机器人执行录像" data-aria-en="Robot rollout clips"></div>
 
+    </section>
+
+    <section id="appendix-rollouts" class="paper-section paper-width">
+      <header class="section-heading">
+        <h2 data-en="More Tabletop Rollouts">更多桌面任务录像</h2>
+      </header>
+      <figure class="video-stage appendix-stage">
+        <video id="appendix-video" controls playsinline preload="none"></video>
+        <figcaption id="appendix-video-caption" aria-live="polite"></figcaption>
+      </figure>
+      <div id="appendix-clip-cards" class="case-grid clip-grid" aria-label="附录录像" data-aria-en="Appendix rollout clips"></div>
     </section>
 
     <footer class="paper-footer paper-width">

@@ -842,6 +842,35 @@ function rollouts() {
   return render;
 }
 
+function appendixRollouts() {
+  const video = $('appendix-video'), cards = $('appendix-clip-cards'), caption = $('appendix-video-caption');
+  let selected = corpus.appendixVideos[0];
+  const buttons = new Map();
+
+  function select(row) {
+    selected = row;
+    video.pause();
+    video.poster = row.poster;
+    video.src = row.video;
+    for (const [id, button] of buttons) button.setAttribute('aria-pressed', String(id === row.id));
+    caption.textContent = `${row.id} · ${local(row.name)} · ${row.seconds.toFixed(1)} s`;
+  }
+
+  select(selected);
+  return () => {
+    buttons.clear();
+    cards.replaceChildren(...corpus.appendixVideos.map(row => {
+      const button = makeCard(row.id, local(row.name), row.poster, `${row.seconds.toFixed(1)} s`,
+        row === selected, () => {
+          if (row !== selected) select(row);
+        }, row.id);
+      buttons.set(row.id, button);
+      return button;
+    }));
+    caption.textContent = `${selected.id} · ${local(selected.name)} · ${selected.seconds.toFixed(1)} s`;
+  };
+}
+
 function renderLearning(lightbox) {
   const policyRoot = $('policy-metrics');
   if (policyRoot && studyData.policyAdaptation) {
@@ -913,6 +942,13 @@ export function setupStudy() {
   const drawRubrics = setupRubricResults();
   const gal = gallery(lightbox);
   const drawRollouts = rollouts();
+  const drawAppendixRollouts = appendixRollouts();
+  const players = [...document.querySelectorAll('.paper-page video')];
+  for (const player of players) {
+    player.addEventListener('play', () => {
+      for (const other of players) if (other !== player) other.pause();
+    });
+  }
   const drawMethod = setupMethodDiagram($('method-architecture'), {
     onInspect3D: id => gal.selectById(id, true)
   });
@@ -927,6 +963,7 @@ export function setupStudy() {
     drawRubrics();
     gal.redraw();
     drawRollouts();
+    drawAppendixRollouts();
     renderLearning(lightbox);
   }
 

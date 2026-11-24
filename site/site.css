@@ -1537,6 +1537,13 @@ body.paper-active .room-screen { visibility: hidden; }
   font-family: var(--font-mono);
   font-size: 0.79rem;
 }
+.walkthrough-stage,
+.appendix-stage {
+  max-width: 900px;
+  margin-inline: auto;
+}
+.walkthrough-stage video { aspect-ratio: 16 / 9; }
+.appendix-stage video { aspect-ratio: 4 / 3; }
 
 .telemetry-panel {
   background: var(--paper);

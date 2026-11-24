@@ -1,0 +1,58 @@
+WEBVTT
+
+00:00.400 --> 00:07.483
+EmbodiedStudio turns a task request into a physically grounded simulation, with trajectories and replayable scoring.
+
+00:08.050 --> 00:10.887
+Putting food away takes more than a realistic kitchen.
+
+00:11.067 --> 00:15.163
+The food must move, the shelf must fit it, and the score must check event order.
+
+00:16.050 --> 00:24.946
+EmbodiedStudio writes the scene, task, behavior, and rubric together, refining them with simulator measurements and independent review before freezing.
+
+00:25.800 --> 00:32.051
+Inside the workbench, the frozen kitchen is a fully inspectable 3D scene ready for geometry checks.
+
+00:35.050 --> 00:39.487
+Here, the frozen program builds the kitchen from the floor up, leaving a clear aisle.
+
+00:39.667 --> 00:43.017
+Every feedback-driven edit also trains object placement.
+
+00:47.050 --> 00:55.071
+Fifty benchmark requests span tabletops, furnished rooms, and multi-room layouts, each initialized in an actionable starting state.
+
+00:55.800 --> 01:03.032
+EmbodiedStudio outperforms all five baselines across every metric, reaching ninety-eight point four percent readiness.
+
+01:03.212 --> 01:06.540
+Removing feedback or review drops geometry and readiness.
+
+01:07.300 --> 01:09.327
+Opening the drawer earns partial credit.
+
+01:09.507 --> 01:12.941
+The score rises when the pen enters, and hits one once closed.
+
+01:13.121 --> 01:15.511
+Leaving it open earns zero point seven.
+
+01:17.800 --> 01:26.461
+Across twenty tasks, our rubrics lead in expression quality and balanced accuracy, achieving zero false positives through strict verification.
+
+02:34.800 --> 02:37.445
+Our interactive appendix exposes every check.
+
+02:37.625 --> 02:43.727
+For request match, selecting the food confirms its pose, and the refrigerator pinpoints the destination.
+
+02:44.550 --> 02:46.726
+Task readiness checks the space for action.
+
+02:46.906 --> 02:51.365
+Hiding the lower door reveals the shelf, while the left aisle confirms a clear route.
+
+02:52.050 --> 02:58.301
+EmbodiedStudio: one frozen environment linking construction, execution, and replayable scores.

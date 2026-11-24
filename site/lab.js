@@ -5,7 +5,6 @@ const panel = document.getElementById('paper-page');
 const roomScreen = document.getElementById('room-screen');
 const roomPoster = document.getElementById('room-poster');
 const posterPortrait = matchMedia('(max-aspect-ratio: 3/4)');
-const video = panel.querySelector('video');
 const themeToggles = [...document.querySelectorAll('[data-theme-toggle]')];
 const themeMeta = document.querySelector('meta[name="theme-color"]');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -64,6 +63,11 @@ function preparePaper() {
     for (const image of panel.querySelectorAll('img[data-paper-src]')) {
       image.src = image.dataset.paperSrc;
       image.removeAttribute('data-paper-src');
+    }
+    const walkthrough = panel.querySelector('video[data-paper-video]');
+    if (walkthrough) {
+      walkthrough.poster = walkthrough.dataset.paperPoster;
+      walkthrough.src = walkthrough.dataset.paperVideo;
     }
     studyPromise = import('./study.js').then(({setupStudy}) => setupStudy()).catch(error => {
       studyPromise = null;
@@ -206,7 +210,7 @@ function openPaper(uv) {
 }
 
 function returnToRoom() {
-  video?.pause();
+  for (const player of panel.querySelectorAll('video')) player.pause();
   window.scrollTo(0, 0);
   panel.inert = true;
   panel.setAttribute('aria-hidden', 'true');
