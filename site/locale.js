@@ -1,4 +1,10 @@
-export let language = new URLSearchParams(location.search).get('lang') === 'en' ? 'en' : 'zh';
+const languagePreferences = [
+  new URLSearchParams(location.search).get('lang'),
+  ...(navigator.languages?.length ? navigator.languages : [navigator.language]),
+];
+export let language = languagePreferences
+  .map(tag => tag?.toLowerCase().split('-')[0])
+  .find(value => value === 'zh' || value === 'en') ?? 'en';
 export const tr = (zh, en) => (language === 'en' ? en : zh);
 
 const copy = [...document.querySelectorAll('[data-en]')].map(node => [node, node.textContent]);

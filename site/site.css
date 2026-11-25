@@ -517,7 +517,7 @@ body.is-night .paper-page {
   font-size: .85rem;
   align-items: center;
 }
-#arxiv-status {
+#arxiv-link {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -529,7 +529,7 @@ body.is-night .paper-page {
   font-size: 0.78rem;
   font-weight: 540;
 }
-#arxiv-status::before {
+#arxiv-link::before {
   content: "";
   width: 6px;
   height: 6px;
